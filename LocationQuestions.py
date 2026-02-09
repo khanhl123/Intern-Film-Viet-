@@ -465,10 +465,10 @@ def build_timing_scatter(df, title, label_col, q25, q75, top_label_n=8):
     if df.empty:
         raise ValueError("No data for timing scatter.")
 
-    df["label"] = ""
+    df["label_text"] = ""
     if top_label_n > 0:
         top_rows = df.nlargest(top_label_n, "total_gross")
-        df.loc[top_rows.index, "label"] = df[label_col]
+        df.loc[top_rows.index, "label_text"] = df[label_col]
 
     max_gross = df["total_gross"].max()
     df["bubble_size"] = 12 + 28 * (df["total_gross"] / max_gross)
@@ -480,7 +480,7 @@ def build_timing_scatter(df, title, label_col, q25, q75, top_label_n=8):
                 x=group["weighted_early_share"],
                 y=group["total_gross"],
                 mode="markers+text",
-                text=group["label"],
+                text=group["label_text"],
                 textposition="top center",
                 marker={
                     "size": group["bubble_size"],
@@ -603,17 +603,31 @@ def build_timing_share_comparison(df, title):
     return fig
 
 
-def build_timing_boxplot(df, title):
+def build_timing_boxplot(df, title, label_col=None):
     fig = go.Figure()
     for timing_type in ["EARLY_ADOPTER", "BALANCED", "SLOW_BURN"]:
-        data = df[df["timing_class"] == timing_type]["total_gross"]
+        subset = df[df["timing_class"] == timing_type]
+        data = subset["total_gross"]
+        customdata = None
+        hovertemplate = "<b>%{fullData.name}</b><br>Total gross: $%{y:,.0f}<extra></extra>"
+        if label_col and label_col in subset.columns:
+            customdata = subset[label_col].astype(str)
+            hovertemplate = (
+                "<b>%{fullData.name}</b><br>"
+                "Location: %{customdata}<br>"
+                "Total gross: $%{y:,.0f}<extra></extra>"
+            )
         fig.add_trace(
             go.Box(
                 y=data,
                 name=timing_type,
                 marker_color=TIMING_COLORS.get(timing_type, "#777777"),
                 boxmean="sd",
-                hovertemplate="<b>%{fullData.name}</b><br>Total gross: $%{y:,.0f}<extra></extra>",
+                boxpoints="all",
+                jitter=0.35,
+                pointpos=0,
+                customdata=customdata,
+                hovertemplate=hovertemplate,
             )
         )
     fig.update_layout(
@@ -755,10 +769,10 @@ def build_q1_scatter(df, title, label_col, top_label_n=8):
     if df.empty:
         raise ValueError("No data for Q1 scatter.")
 
-    df["label"] = ""
+    df["label_text"] = ""
     if top_label_n > 0:
         top_rows = df.nlargest(top_label_n, "mean_weekly_gross")
-        df.loc[top_rows.index, "label"] = df[label_col]
+        df.loc[top_rows.index, "label_text"] = df[label_col]
 
     max_gross = df["mean_weekly_gross"].max()
     df["bubble_size"] = 12 + 28 * (df["mean_weekly_gross"] / max_gross)
@@ -773,7 +787,7 @@ def build_q1_scatter(df, title, label_col, top_label_n=8):
                 x=group["mean_weekly_gross"],
                 y=group["cv"],
                 mode="markers+text",
-                text=group["label"],
+                text=group["label_text"],
                 textposition="top center",
                 marker={
                     "size": group["bubble_size"],
@@ -2071,16 +2085,19 @@ cinema_timing_fig = build_timing_scatter(
 )
 
 state_revenue_fig = build_timing_boxplot(
-    state_plot,
+    state_story_df,
     title="Revenue distribution by timing type (States)",
+    label_col="label",
 )
 city_revenue_fig = build_timing_boxplot(
-    city_plot,
+    city_story_df,
     title="Revenue distribution by timing type (Cities)",
+    label_col="label",
 )
 cinema_revenue_fig = build_timing_boxplot(
-    cinema_plot,
+    cinema_story_df,
     title="Revenue distribution by timing type (Cinemas)",
+    label_col="label",
 )
 
 state_speed_fig = build_speed_dumbbell(
