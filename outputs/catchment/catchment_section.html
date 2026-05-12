@@ -1,0 +1,39 @@
+<section class="card intro-card">
+  <h2>Why the map looks this way: a catchment model</h2>
+  <p class="lead">Q1–Q3 describe <em>where</em> Indian films sell. This section asks <em>why</em>.
+  We regress weekly cinema gross on the demographics of the SA4 catchment each cinema sits in,
+  controlling for the film, the calendar week, and local competition.</p>
+</section>
+<section class="card">
+  <h3>Headline result</h3>
+  <p>Holding the film, the calendar week, income, and age structure constant,
+  <strong>a +5 percentage-point increase in the Indian-ancestry share of a cinema's SA4 catchment is
+  associated with a +81.6% change in weekly gross</strong>
+  (95% CI: +21.4% to +171.5%; n = 10,498; R² = 0.42 in full-FE spec).</p>
+  <p class="lead">This is the structural demand signal that Q1's "Safer / Volatile" labels were
+  picking up indirectly. Cities flagged as "Safer" tend to sit on SA4s with a thick Indian-Australian
+  population — the stability is a fundamentals story, not statistical luck.</p>
+</section>
+<section class="card">
+  <h3>Coefficients across nested specifications</h3>
+  <table class='coef-table'><thead><tr><th>Variable</th><th>M1</th><th>M2</th><th>M3</th></tr></thead><tbody><tr><th>pct_indian_ancestry</th><td>0.095***<br><span class='ci'>[0.043, 0.147]</span></td><td>0.100***<br><span class='ci'>[0.029, 0.171]</span></td><td>0.119***<br><span class='ci'>[0.039, 0.200]</span></td></tr><tr><th>log_pop_density</th><td>0.099***<br><span class='ci'>[0.025, 0.173]</span></td><td>0.112**<br><span class='ci'>[0.026, 0.198]</span></td><td>0.122***<br><span class='ci'>[0.031, 0.214]</span></td></tr><tr><th>nearest_competitor_km</th><td>0.000<br><span class='ci'>[-0.001, 0.001]</span></td><td>0.000<br><span class='ci'>[-0.001, 0.002]</span></td><td>0.000<br><span class='ci'>[-0.002, 0.002]</span></td></tr><tr><th>median_income_k</th><td>—</td><td>-0.209<br><span class='ci'>[-0.638, 0.220]</span></td><td>-0.188<br><span class='ci'>[-0.652, 0.275]</span></td></tr><tr><th>median_age</th><td>—</td><td>-0.021<br><span class='ci'>[-0.074, 0.032]</span></td><td>-0.021<br><span class='ci'>[-0.078, 0.036]</span></td></tr><tr><th>N</th><td>10,498</td><td>10,498</td><td>10,498</td></tr><tr><th>R²</th><td>0.070</td><td>0.155</td><td>0.423</td></tr></tbody></table>
+  <p class="helper">Coefficients on log(gross). Standard errors clustered on cinema.
+  *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.1. M1 = baseline; M2 adds income/age + film-age FE;
+  M3 adds film and calendar-week fixed effects.</p>
+</section>
+<section class="card">
+  <h3>Effect curve</h3>
+  <p>Predicted weekly gross as Indian-ancestry % varies, with every other variable held at its median.</p>
+  <img src="../outputs_catchment/effect_curve_indian_ancestry.png"
+       alt="Effect curve: Indian-ancestry % vs predicted weekly gross"
+       style="max-width:100%;height:auto;border:1px solid var(--stroke);border-radius:8px;" />
+</section>
+<section class="card">
+  <h3>Where the model still leaves money unexplained</h3>
+  <p>SA4-level mean residuals after M3. Positive bars = the catchment model
+  <em>under-predicts</em> demand there — something beyond demographics is driving it
+  (cinema quality, marketing, community events). Negative = over-prediction.</p>
+  <img src="../outputs_catchment/residuals_by_sa4.png"
+       alt="Top and bottom SA4s by mean model residual"
+       style="max-width:100%;height:auto;border:1px solid var(--stroke);border-radius:8px;" />
+</section>

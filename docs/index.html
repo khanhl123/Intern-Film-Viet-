@@ -368,12 +368,13 @@
         <div class="breadcrumbs">Masalytics / Location Insights / Final Report</div>
         <div class="masthead-title">
           <h1>Location Questions Final Report</h1>
-          <p>Combined Q1-Q3 insights with a toggle to switch between question narratives.</p>
+          <p>Combined Q1-Q4 insights with a toggle to switch between question narratives.</p>
         </div>
         <div class="masthead-meta">
+          <div class="meta-chip">Client: Film Viet Australia</div>
           <div class="meta-chip">Author: Lieu Duong Quoc Khanh</div>
           <div class="meta-chip">Mentor: Daniel Pham</div>
-          <div class="meta-chip">Scope: Q1 + Q2 + Q3</div>
+          <div class="meta-chip">Scope: Q1 + Q2 + Q3 + Q4 (catchment)</div>
           <div class="meta-chip">Levels: State, City, Cinema</div>
           <div class="meta-chip">Mode: Interactive plots</div>
         </div>
@@ -390,6 +391,7 @@
                 <option value="q1" selected>Q1 - Stability vs Volatility</option>
                 <option value="q2">Q2 - Early Adopter vs Slow Burn</option>
                 <option value="q3">Q3 - Seasonality Story</option>
+                <option value="q4">Q4 - Catchment Model (why)</option>
               </select>
             </div>
             <p class="helper">Choose which question to display in the report.</p>
@@ -473,6 +475,19 @@
               <div class="legend-item"><span class="legend-dot peak"></span>Above-median demand</div>
               <div class="legend-item"><span class="legend-dot quiet"></span>Below-median demand</div>
             </div>
+          </section>          </div>
+          <div class="question-sidebar" data-question="q4"><section class="panel">
+            <h2>Story overview</h2>
+            <p class="lead">A causal-style regression that explains weekly cinema gross from SA4 catchment demographics, controlling for the film, calendar week, and local competition.</p>
+            <ul class="summary-list">
+              <li><span>Headline</span><strong>+5pp Indian ancestry → +81.6% weekly gross (95% CI +21% to +172%)</strong></li>
+              <li><span>Sample</span><strong>10,498 cinema-weeks · 94 films · 142 cinemas</strong></li>
+              <li><span>Fit</span><strong>R² = 0.42 in the full fixed-effects spec</strong></li>
+            </ul>
+          </section>
+          <section class="panel legend-panel">
+            <h2>How to read it</h2>
+            <p class="lead">Coefficients are on log(gross), so each unit increases gross multiplicatively. <strong>***</strong> = p &lt; 0.01.</p>
           </section>          </div>
         </aside>
         <div class="content">
@@ -928,6 +943,44 @@
               <p class="lead">Top cinemas with their peak and quiet weeks.</p>
               <table class="spotlight-table"><thead><tr><th>Cinema</th><th>Avg weekly gross</th><th>Peak week</th><th>Quiet week</th></tr></thead><tbody><tr><td>Blacktown 10 (West and Blue Mountains, New South Wales (inc ACT))</td><td>5,920,203</td><td>W33</td><td>W46</td></tr><tr><td>Sunshine 20 (West Melbourne, Victoria (inc TAS))</td><td>4,557,774</td><td>W33</td><td>W46</td></tr><tr><td>Parramatta 11 (Parramatta & Ryde, New South Wales (inc ACT))</td><td>4,049,297</td><td>W33</td><td>W46</td></tr><tr><td>Werribee 12 (West Melbourne, Victoria (inc TAS))</td><td>2,829,779</td><td>W33</td><td>W46</td></tr><tr><td>Carousel 14 (Perth - South East, Western Australia)</td><td>2,774,247</td><td>W33</td><td>W46</td></tr><tr><td>Chadstone 13 (South East Melbourne, Victoria (inc TAS))</td><td>2,686,423</td><td>W33</td><td>W46</td></tr></tbody></table>
             </section>          </div>
+          </div>
+          <div class="question-section" data-question="q4"><section class="card intro-card">
+            <h2>Q4 Catchment Model</h2>
+            <p class="lead">Q1–Q3 describe <em>where</em> Indian films sell. This section asks <em>why</em>, regressing weekly cinema gross on SA4 catchment demographics.</p>
+          </section>
+          <section class="card">
+            <h3>Question focus</h3>
+            <p class="lead">Explain the spatial pattern with structural demand: Indian-ancestry share, density, income, age, and local competition, controlling for the film and the calendar week.</p>
+          </section>
+            <section class="card">
+              <h3>Headline result</h3>
+              <p>Holding the film, the calendar week, income, and age structure constant, <strong>a +5 percentage-point increase in the Indian-ancestry share of a cinema's SA4 catchment is associated with a +81.6% change in weekly gross</strong> (95% CI: +21.4% to +171.5%; n = 10,498; R² = 0.42 in full-FE spec).</p>
+              <p class="lead">This is the structural demand signal that Q1's "Safer / Volatile" labels were picking up indirectly. Cities flagged as "Safer" tend to sit on SA4s with a thick Indian-Australian population, and the stability is a fundamentals story, not statistical luck.</p>
+            </section>
+            <section class="card">
+              <h3>Coefficients across nested specifications</h3>
+              <table class='coef-table'><thead><tr><th>Variable</th><th>M1</th><th>M2</th><th>M3</th></tr></thead><tbody><tr><th>pct_indian_ancestry</th><td>0.095***<br><span class='ci'>[0.043, 0.147]</span></td><td>0.100***<br><span class='ci'>[0.029, 0.171]</span></td><td>0.119***<br><span class='ci'>[0.039, 0.200]</span></td></tr><tr><th>log_pop_density</th><td>0.099***<br><span class='ci'>[0.025, 0.173]</span></td><td>0.112**<br><span class='ci'>[0.026, 0.198]</span></td><td>0.122***<br><span class='ci'>[0.031, 0.214]</span></td></tr><tr><th>nearest_competitor_km</th><td>0.000<br><span class='ci'>[-0.001, 0.001]</span></td><td>0.000<br><span class='ci'>[-0.001, 0.002]</span></td><td>0.000<br><span class='ci'>[-0.002, 0.002]</span></td></tr><tr><th>median_income_k</th><td>n/a</td><td>-0.209<br><span class='ci'>[-0.638, 0.220]</span></td><td>-0.188<br><span class='ci'>[-0.652, 0.275]</span></td></tr><tr><th>median_age</th><td>n/a</td><td>-0.021<br><span class='ci'>[-0.074, 0.032]</span></td><td>-0.021<br><span class='ci'>[-0.078, 0.036]</span></td></tr><tr><th>N</th><td>10,498</td><td>10,498</td><td>10,498</td></tr><tr><th>R²</th><td>0.070</td><td>0.155</td><td>0.423</td></tr></tbody></table>
+              <p class="helper">Coefficients on log(gross). Standard errors clustered on cinema. *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.1. M1 = baseline; M2 adds income/age + film-age FE; M3 adds film and calendar-week fixed effects.</p>
+            </section>
+            <section class="card">
+              <h3>Effect curve</h3>
+              <p>Predicted weekly gross as Indian-ancestry % varies, with every other variable held at its median.</p>
+              <img src="effect_curve_indian_ancestry.png" alt="Effect curve: Indian-ancestry % vs predicted weekly gross" style="max-width:100%;height:auto;border:1px solid var(--stroke);border-radius:8px;" />
+            </section>
+            <section class="card">
+              <h3>Where the model still leaves money unexplained</h3>
+              <p>SA4-level mean residuals after M3. Positive bars = the catchment model <em>under-predicts</em> demand there, so something beyond demographics is driving it (cinema quality, marketing, community events). Negative = over-prediction.</p>
+              <img src="residuals_by_sa4.png" alt="Top and bottom SA4s by mean model residual" style="max-width:100%;height:auto;border:1px solid var(--stroke);border-radius:8px;" />
+            </section>
+            <section class="card">
+              <h3>Caveats</h3>
+              <ul>
+                <li>SA4 polygons are coarse: Sydney's Indian-Australian heartland sits inside a few suburbs (Parramatta, Blacktown) but SA4 spreads that signal across a much larger area. An SA2-level rerun would sharpen the estimate.</li>
+                <li>143 of 198 unique cinemas geocoded. Mostly regional cinemas were excluded; the panel is representative of metropolitan demand.</li>
+                <li>Coefficients are <em>conditional associations</em>, not RCT-style causal effects. The fixed effects control for film and week-level shocks, but unmeasured confounders (advertising spend, suburb-level cinema quality) remain.</li>
+              </ul>
+            </section>
+          </div>
         </div>
       </div>
     </main>

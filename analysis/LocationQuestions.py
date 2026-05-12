@@ -1,0 +1,2804 @@
+# LocationQuestions.py
+# This script performs location-based analysis for film box office performance
+# It imports all preprocessed data and variables from DataExplorationMain
+
+import json
+import sqlite3
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+import plotly.io as pio
+from plotly.subplots import make_subplots
+import seaborn as sns
+
+from DataExplorationMain import film_meta, indian_titles, sales, sales_indian
+from project_paths import DATA_DIR, OUTPUTS_LOCATION_QUESTIONS, ensure_dir, find_database_path
+
+OUTPUT_DIR = ensure_dir(OUTPUTS_LOCATION_QUESTIONS)
+Q2_STORY_HTML = OUTPUT_DIR / "q2_story.html"
+Q1_STORY_HTML = OUTPUT_DIR / "q1_story.html"
+TIMING_COLORS = {
+    "EARLY_ADOPTER": "rgb(31, 119, 180)",
+    "BALANCED": "rgb(255, 127, 14)",
+    "SLOW_BURN": "rgb(44, 160, 44)",
+}
+RISK_COLORS = {
+    "Safer (Stable)": "rgb(44, 160, 44)",
+    "Moderate": "rgb(255, 127, 14)",
+    "Higher-Risk (Volatile)": "rgb(214, 39, 40)",
+    "Highly Volatile": "rgb(148, 103, 189)",
+}
+RISK_ORDER = [
+    "Safer (Stable)",
+    "Moderate",
+    "Higher-Risk (Volatile)",
+    "Highly Volatile",
+]
+Q2_SPOTLIGHT_TOP_N = 5
+Q2_LABEL_TOP_N = 8
+Q1_SPOTLIGHT_TOP_N = 6
+WRITE_LEGACY_Q1_OUTPUTS = False
+WRITE_LEGACY_Q2_OUTPUTS = False
+WRITE_LEGACY_Q3_OUTPUTS = False
+
+# ============================================================================
+# QUESTION 1: Steady vs Inconsistent Box Office
+# ============================================================================
+# Which key cities and cinemas have steady weekly box office, and which are 
+# more up-and-down (inconsistent)? How should Film Viet rank these locations 
+# as safer vs higher-risk targets?
+
+print("\n" + "="*80)
+print("QUESTION 1: Steady vs Inconsistent Box Office")
+print("="*80)
+
+# Check the sales data shape from DataExplorationMain
+print("\nData shape and columns from DataExplorationMain:")
+print(sales.shape, sales.columns.tolist())
+
+# Add week_start column
+sales = sales.copy()
+sales['week_start'] = (
+    sales['actual_sales_date']
+      .dt.to_period('W')
+      .apply(lambda r: r.start_time)
+      .dt.date
+)
+
+print("\nWeek start sample:")
+print(sales[['actual_sales_date', 'week_start']].head(10))
+
+# Aggregate by cinema and week
+weekly_cinema = (
+    sales
+      .groupby(['state', 'city', 'theatre_name', 'week_start'], as_index=False)['gross_today']
+      .sum()
+      .rename(columns={'gross_today': 'weekly_gross'})
+)
+
+print("\nWeekly cinema sample:")
+print(weekly_cinema.head())
+
+# Aggregate by city and week
+weekly_city = (
+    sales
+      .groupby(['state', 'city', 'week_start'], as_index=False)['gross_today']
+      .sum()
+      .rename(columns={'gross_today': 'weekly_gross'})
+)
+
+print("\nWeekly city sample:")
+print(weekly_city.head())
+
+print(f"\nWeekly aggregation shapes: cinema={weekly_cinema.shape}, city={weekly_city.shape}")
+
+# Calculate statistics: mean, std, and CV for cinemas
+cinema_stats = (
+    weekly_cinema
+      .groupby(['state', 'city', 'theatre_name'], as_index=False)
+      .agg(
+          mean_weekly_gross=('weekly_gross', 'mean'),
+          std_weekly_gross=('weekly_gross', 'std'),
+          weeks_count=('weekly_gross', 'count')
+      )
+)
+
+cinema_stats['cv'] = cinema_stats['std_weekly_gross'] / cinema_stats['mean_weekly_gross']
+
+print("\nCinema stats sample:")
+print(cinema_stats.head())
+
+# Calculate statistics for cities
+city_stats = (
+    weekly_city
+      .groupby(['state', 'city'], as_index=False)
+      .agg(
+          mean_weekly_gross=('weekly_gross', 'mean'),
+          std_weekly_gross=('weekly_gross', 'std'),
+          weeks_count=('weekly_gross', 'count')
+      )
+)
+
+city_stats['cv'] = city_stats['std_weekly_gross'] / city_stats['mean_weekly_gross']
+
+print("\nCity stats sample:")
+print(city_stats.head())
+
+# Display statistics summary
+print("\nCinema CV statistics:")
+print(cinema_stats[['mean_weekly_gross', 'cv', 'weeks_count']].describe())
+
+print("\nCity CV statistics:")
+print(city_stats[['mean_weekly_gross', 'cv', 'weeks_count']].describe())
+
+# Filter by minimum weeks requirement
+MIN_WEEKS = 8
+
+cinema_stats_f = cinema_stats.copy()
+cinema_stats_f = cinema_stats_f[
+    (cinema_stats_f['weeks_count'] >= MIN_WEEKS) &
+    (cinema_stats_f['mean_weekly_gross'] > 0) &
+    (cinema_stats_f['cv'].notna())
+].copy()
+
+city_stats_f = city_stats.copy()
+city_stats_f = city_stats_f[
+    (city_stats_f['weeks_count'] >= MIN_WEEKS) &
+    (city_stats_f['mean_weekly_gross'] > 0) &
+    (city_stats_f['cv'].notna())
+].copy()
+
+print(f"\nAfter MIN_WEEKS={MIN_WEEKS} filter:")
+print(f"Cinemas: {cinema_stats_f.shape[0]} (from {cinema_stats.shape[0]})")
+print(f"Cities: {city_stats_f.shape[0]} (from {city_stats.shape[0]})")
+
+# Classify by risk category based on CV
+def classify_cv(cv):
+    if cv < 0.75:
+        return 'Safer (Stable)'
+    elif cv < 1.10:
+        return 'Moderate'
+    elif cv < 1.50:
+        return 'Higher-Risk (Volatile)'
+    else:
+        return 'Highly Volatile'
+
+cinema_stats_f['risk_category'] = cinema_stats_f['cv'].apply(classify_cv)
+city_stats_f['risk_category'] = city_stats_f['cv'].apply(classify_cv)
+
+print("\nRisk category distribution:")
+print("Cinemas:")
+print(cinema_stats_f['risk_category'].value_counts())
+print("\nCities:")
+print(city_stats_f['risk_category'].value_counts())
+
+# Calculate risk-adjusted score
+cinema_stats_f['risk_adjusted_score'] = cinema_stats_f['mean_weekly_gross'] / (1 + cinema_stats_f['cv'])
+city_stats_f['risk_adjusted_score'] = city_stats_f['mean_weekly_gross'] / (1 + city_stats_f['cv'])
+
+# Top key venues
+key_cinemas = cinema_stats_f.sort_values('mean_weekly_gross', ascending=False).head(20).copy()
+print("\nTop 10 key cinemas by revenue:")
+print(key_cinemas[['state','city','theatre_name','mean_weekly_gross','cv','weeks_count','risk_category']].head(10))
+
+key_cities = city_stats_f.sort_values('mean_weekly_gross', ascending=False).head(15).copy()
+print("\nTop 10 key cities by revenue:")
+print(key_cities[['state','city','mean_weekly_gross','cv','weeks_count','risk_category']].head(10))
+
+# Safer venues
+safer_key_cinemas = (
+    key_cinemas[key_cinemas['risk_category'] == 'Safer (Stable)']
+      .sort_values('mean_weekly_gross', ascending=False)
+      .copy()
+)
+
+safer_key_cities = (
+    key_cities[key_cities['risk_category'] == 'Safer (Stable)']
+      .sort_values('mean_weekly_gross', ascending=False)
+      .copy()
+)
+
+print("\nTop safer cinemas:")
+print(safer_key_cinemas[['state','city','theatre_name','mean_weekly_gross','cv','weeks_count','risk_category']])
+
+print("\nTop safer cities:")
+print(safer_key_cities[['state','city','mean_weekly_gross','cv','weeks_count','risk_category']])
+
+# Higher-risk venues
+risk_key_cinemas2 = (
+    cinema_stats_f[cinema_stats_f['risk_category'].isin(['Higher-Risk (Volatile)', 'Highly Volatile'])]
+      .sort_values('mean_weekly_gross', ascending=False)
+      .head(15)
+)
+
+risk_key_cities2 = (
+    city_stats_f[city_stats_f['risk_category'].isin(['Higher-Risk (Volatile)', 'Highly Volatile'])]
+      .sort_values('mean_weekly_gross', ascending=False)
+      .head(10)
+)
+
+print("\nTop higher-risk cinemas:")
+print(risk_key_cinemas2[['state','city','theatre_name','mean_weekly_gross','cv','weeks_count','risk_category']])
+
+print("\nTop higher-risk cities:")
+print(risk_key_cities2[['state','city','mean_weekly_gross','cv','weeks_count','risk_category']])
+
+# Safer venues ranked by risk-adjusted score
+safer_cinemas_ranked = (
+    cinema_stats_f[cinema_stats_f['risk_category'] == 'Safer (Stable)']
+      .sort_values('risk_adjusted_score', ascending=False)
+      .head(10)
+)
+
+safer_cities_ranked = (
+    city_stats_f[city_stats_f['risk_category'] == 'Safer (Stable)']
+      .sort_values('risk_adjusted_score', ascending=False)
+      .head(10)
+)
+
+print("\nTop 10 safer cinemas (by risk-adjusted score):")
+print(safer_cinemas_ranked[['state','city','theatre_name','mean_weekly_gross','cv','weeks_count','risk_adjusted_score']])
+
+print("\nTop 10 safer cities (by risk-adjusted score):")
+print(safer_cities_ranked[['state','city','mean_weekly_gross','cv','weeks_count','risk_adjusted_score']])
+
+if WRITE_LEGACY_Q1_OUTPUTS:
+    # Create visualization: cinemas scatter plot
+    plot_df = pd.concat([
+        safer_key_cinemas.assign(group='Safer key (revenue-first)'),
+        risk_key_cinemas2.assign(group='Higher-risk key (opportunity-first)')
+    ], ignore_index=True)
+    
+    plt.figure(figsize=(12, 7))
+    
+    for g, sub in plot_df.groupby('group'):
+        plt.scatter(sub['mean_weekly_gross'], sub['cv'], label=g, s=120, alpha=0.85)
+    
+    plt.xscale('log')
+    
+    labels = pd.concat([
+        safer_key_cinemas.sort_values('mean_weekly_gross', ascending=False).head(3),
+        risk_key_cinemas2.sort_values('cv', ascending=False).head(3),
+    ], ignore_index=True)
+    
+    for _, r in labels.iterrows():
+        plt.annotate(
+            r['theatre_name'],
+            (r['mean_weekly_gross'], r['cv']),
+            textcoords="offset points",
+            xytext=(6, 6),
+            ha='left',
+            fontsize=9
+        )
+    
+    plt.xlabel("Average Weekly Gross ($, log scale)")
+    plt.ylabel("CV (Volatility)")
+    plt.title("Key Cinemas: Stability vs Volatility (Log scale improves readability)")
+    plt.legend()
+    plt.grid(True, alpha=0.3, which='both')
+    plt.tight_layout()
+    plt.savefig(OUTPUT_DIR / "q1_cinemas_scatter.png", dpi=100, bbox_inches='tight')
+    plt.close()
+    
+    # Create visualization: cities scatter plot
+    plot_city = pd.concat([
+        safer_key_cities.assign(group='Safer key (revenue-first)'),
+        risk_key_cities2.assign(group='Higher-risk key (opportunity-first)')
+    ], ignore_index=True)
+    
+    plt.figure(figsize=(12, 7))
+    
+    for g, sub in plot_city.groupby('group'):
+        plt.scatter(sub['mean_weekly_gross'], sub['cv'], label=g, s=140, alpha=0.85)
+    
+    plt.xscale('log')
+    
+    labels_city = pd.concat([
+        safer_key_cities.sort_values('mean_weekly_gross', ascending=False).head(3),
+        risk_key_cities2.sort_values('cv', ascending=False).head(3),
+    ], ignore_index=True)
+    
+    for _, r in labels_city.iterrows():
+        plt.annotate(r['city'], (r['mean_weekly_gross'], r['cv']),
+                     textcoords="offset points", xytext=(6, 6), fontsize=9)
+    
+    plt.xlabel("Average Weekly Gross ($, log scale)")
+    plt.ylabel("CV (Volatility)")
+    plt.title("Key Cities: Stability vs Volatility (Filtered, MIN_WEEKS applied)")
+    plt.legend()
+    plt.grid(True, alpha=0.3, which='both')
+    plt.tight_layout()
+    plt.savefig(OUTPUT_DIR / "q1_cities_scatter.png", dpi=100, bbox_inches='tight')
+    plt.close()
+    
+    # Create visualization: safer cinemas bar chart
+    safer_cinemas_ranked_plot = (
+        cinema_stats_f[cinema_stats_f['risk_category'] == 'Safer (Stable)']
+          .sort_values('risk_adjusted_score', ascending=False)
+          .head(10)
+          .copy()
+    )
+    
+    safer_cinemas_ranked_plot['label'] = safer_cinemas_ranked_plot['theatre_name'] + " (" + safer_cinemas_ranked_plot['city'] + ")"
+    safer_cinemas_ranked_plot = safer_cinemas_ranked_plot.sort_values('risk_adjusted_score', ascending=True)
+    
+    plt.figure(figsize=(12, 6))
+    plt.barh(safer_cinemas_ranked_plot['label'], safer_cinemas_ranked_plot['risk_adjusted_score'])
+    plt.xlabel("Risk-adjusted score (mean / (1 + CV))")
+    plt.title("Top 10 Safer Cinemas (Ranked)")
+    plt.tight_layout()
+    plt.savefig(OUTPUT_DIR / "q1_safer_cinemas_barh.png", dpi=100, bbox_inches='tight')
+    plt.close()
+    
+    # Create visualization: higher-risk cinemas bar chart
+    risk_cinemas_ranked_plot = (
+        cinema_stats_f[cinema_stats_f['risk_category'].isin(['Higher-Risk (Volatile)', 'Highly Volatile'])]
+          .sort_values(['mean_weekly_gross','cv'], ascending=[False, False])
+          .head(10)
+          .copy()
+    )
+    
+    risk_cinemas_ranked_plot['label'] = risk_cinemas_ranked_plot['theatre_name'] + " (" + risk_cinemas_ranked_plot['city'] + ")"
+    risk_cinemas_ranked_plot = risk_cinemas_ranked_plot.sort_values('mean_weekly_gross', ascending=True)
+    
+    plt.figure(figsize=(12, 6))
+    plt.barh(risk_cinemas_ranked_plot['label'], risk_cinemas_ranked_plot['mean_weekly_gross'])
+    plt.xlabel("Average weekly gross ($)")
+    plt.title("Top 10 Higher-risk Cinemas (Ranked by Upside)")
+    plt.tight_layout()
+    plt.savefig(OUTPUT_DIR / "q1_higher_risk_cinemas_barh.png", dpi=100, bbox_inches='tight')
+    plt.close()
+    
+    # Create visualization: safer cities bar chart
+    safer_cities_ranked_plot = (
+        city_stats_f[city_stats_f['risk_category'] == 'Safer (Stable)']
+          .sort_values('risk_adjusted_score', ascending=False)
+          .head(10)
+          .copy()
+    )
+    
+    safer_cities_ranked_plot['label'] = safer_cities_ranked_plot['city'] + " (" + safer_cities_ranked_plot['state'] + ")"
+    safer_cities_ranked_plot = safer_cities_ranked_plot.sort_values('risk_adjusted_score', ascending=True)
+    
+    plt.figure(figsize=(12, 6))
+    plt.barh(safer_cities_ranked_plot['label'], safer_cities_ranked_plot['risk_adjusted_score'])
+    plt.xlabel("Risk-adjusted score (mean / (1 + CV))")
+    plt.title("Top 10 Safer Cities (Ranked)")
+    plt.tight_layout()
+    plt.savefig(OUTPUT_DIR / "q1_safer_cities_barh.png", dpi=100, bbox_inches='tight')
+    plt.close()
+    
+    # Create visualization: higher-risk cities bar chart
+    risk_cities_ranked_plot = (
+        city_stats_f[city_stats_f['risk_category'].isin(['Higher-Risk (Volatile)', 'Highly Volatile'])]
+          .sort_values(['mean_weekly_gross','cv'], ascending=[False, False])
+          .head(10)
+          .copy()
+    )
+    
+    risk_cities_ranked_plot['label'] = risk_cities_ranked_plot['city'] + " (" + risk_cities_ranked_plot['state'] + ")"
+    risk_cities_ranked_plot = risk_cities_ranked_plot.sort_values('mean_weekly_gross', ascending=True)
+    
+    plt.figure(figsize=(12, 6))
+    plt.barh(risk_cities_ranked_plot['label'], risk_cities_ranked_plot['mean_weekly_gross'])
+    plt.xlabel("Average weekly gross ($)")
+    plt.title("Top 10 Higher-risk Cities (Ranked by Upside)")
+    plt.tight_layout()
+    plt.savefig(OUTPUT_DIR / "q1_higher_risk_cities_barh.png", dpi=100, bbox_inches='tight')
+    plt.close()
+    
+    # Create visualization: volatility heatmap for top cinemas
+    heat_cinemas = pd.concat([safer_cinemas_ranked_plot, risk_cinemas_ranked_plot], ignore_index=True).copy()
+    
+    heat_cinemas['label'] = heat_cinemas['theatre_name'] + " (" + heat_cinemas['city'] + ")"
+    heat_cinemas_labels = heat_cinemas['label'].tolist()
+    
+    weekly_cinema2 = weekly_cinema.copy()
+    weekly_cinema2['label'] = weekly_cinema2['theatre_name'] + " (" + weekly_cinema2['city'] + ")"
+    
+    heat_source = weekly_cinema2[weekly_cinema2['label'].isin(heat_cinemas_labels)].copy()
+    
+    heat_pivot = (
+        heat_source
+          .pivot_table(index='label', columns='week_start', values='weekly_gross', aggfunc='sum')
+          .reindex(index=heat_cinemas_labels)
+    )
+    
+    # Create z-score matrix for heatmap
+    X = np.log1p(heat_pivot)
+    row_mean = X.mean(axis=1)
+    row_std = X.std(axis=1).replace(0, np.nan)
+    Z = (X.sub(row_mean, axis=0)).div(row_std, axis=0)
+    
+    plt.figure(figsize=(16, 8))
+    
+    Z_mat = Z.to_numpy()
+    mask = np.isnan(Z_mat)
+    Z_plot = np.where(mask, 0, Z_mat)
+    
+    im = plt.imshow(Z_plot, aspect='auto', interpolation='nearest')
+    alpha = np.where(mask, 0.0, 1.0)
+    im.set_alpha(alpha)
+    
+    plt.colorbar(im, label="Relative weekly performance (z-score of log1p gross)")
+    
+    plt.yticks(range(len(Z.index)), Z.index, fontsize=9)
+    
+    weeks = list(Z.columns)
+    step = max(1, len(weeks)//12)
+    xticks = list(range(0, len(weeks), step))
+    plt.xticks(xticks, [str(weeks[i]) for i in xticks], rotation=45, ha='right', fontsize=9)
+    
+    plt.title("Volatility Fingerprint: Weekly Gross Patterns (Top Safer vs Higher-risk Cinemas)")
+    plt.xlabel("Week start")
+    plt.ylabel("Cinema")
+    
+    plt.tight_layout()
+    plt.savefig(OUTPUT_DIR / "q1_volatility_heatmap.png", dpi=100, bbox_inches='tight')
+plt.close()
+
+print("\nQ1 visualizations saved to outputs/:")
+print("  - q1_cinemas_scatter.png")
+print("  - q1_cities_scatter.png")
+print("  - q1_safer_cinemas_barh.png")
+print("  - q1_higher_risk_cinemas_barh.png")
+print("  - q1_safer_cities_barh.png")
+print("  - q1_higher_risk_cities_barh.png")
+print("  - q1_volatility_heatmap.png")
+
+# ============== Q2 STORY HELPERS ==============
+
+def _fig_to_html(fig, include_plotlyjs):
+    return pio.to_html(
+        fig,
+        include_plotlyjs="cdn" if include_plotlyjs else False,
+        full_html=False,
+        config={"responsive": True},
+    )
+
+
+def build_timing_scatter(df, title, label_col, q25, q75, top_label_n=8):
+    df = df.copy()
+    df = df[df["total_gross"] > 0].copy()
+    if df.empty:
+        raise ValueError("No data for timing scatter.")
+
+    df["label_text"] = ""
+    if top_label_n > 0:
+        top_rows = df.nlargest(top_label_n, "total_gross")
+        df.loc[top_rows.index, "label_text"] = df[label_col]
+
+    max_gross = df["total_gross"].max()
+    df["bubble_size"] = 12 + 28 * (df["total_gross"] / max_gross)
+
+    fig = go.Figure()
+    for timing_class, group in df.groupby("timing_class"):
+        fig.add_trace(
+            go.Scatter(
+                x=group["weighted_early_share"],
+                y=group["total_gross"],
+                mode="markers+text",
+                text=group["label_text"],
+                textposition="top center",
+                marker={
+                    "size": group["bubble_size"],
+                    "color": TIMING_COLORS.get(timing_class, "#777777"),
+                    "opacity": 0.8,
+                    "line": {"width": 0.6, "color": "#ffffff"},
+                },
+                name=f"{timing_class} (n={len(group)})",
+                customdata=np.stack(
+                    [group[label_col], group["total_gross"], group["weighted_early_share"]],
+                    axis=-1,
+                ),
+                hovertemplate=(
+                    "Label: %{customdata[0]}<br>"
+                    "Total gross: $%{customdata[1]:,.0f}<br>"
+                    "Early share: %{customdata[2]:.2f}<extra></extra>"
+                ),
+            )
+        )
+
+    median_gross = df["total_gross"].median()
+    fig.add_shape(
+        type="line",
+        x0=q25,
+        x1=q25,
+        y0=df["total_gross"].min(),
+        y1=df["total_gross"].max(),
+        line={"color": "#666666", "dash": "dash"},
+    )
+    fig.add_shape(
+        type="line",
+        x0=q75,
+        x1=q75,
+        y0=df["total_gross"].min(),
+        y1=df["total_gross"].max(),
+        line={"color": "#666666", "dash": "dash"},
+    )
+    fig.add_shape(
+        type="line",
+        x0=df["weighted_early_share"].min(),
+        x1=df["weighted_early_share"].max(),
+        y0=median_gross,
+        y1=median_gross,
+        line={"color": "#666666", "dash": "dot"},
+    )
+
+    fig.update_layout(
+        title=title,
+        xaxis_title="Early Share (Weeks 1-2 / Total Gross)",
+        yaxis_title="Total Gross (log scale)",
+        yaxis_type="log",
+        height=520,
+        width=1000,
+        hovermode="closest",
+        template="plotly_white",
+    )
+    return fig
+
+
+def build_timing_share_comparison(df, title):
+    summary = (
+        df.groupby("timing_class")
+        .agg(total_gross=("total_gross", "sum"), count=("total_gross", "size"))
+        .reindex(["EARLY_ADOPTER", "BALANCED", "SLOW_BURN"])
+        .fillna(0)
+    )
+    if summary.empty:
+        raise ValueError("No data for timing share comparison.")
+
+    summary["gross_share"] = summary["total_gross"] / summary["total_gross"].sum()
+    summary["count_share"] = summary["count"] / summary["count"].sum()
+
+    y_vals = summary.index.tolist()
+    gross_vals = summary["gross_share"].tolist()
+    count_vals = summary["count_share"].tolist()
+
+    fig = go.Figure()
+    for y, gross, count in zip(y_vals, gross_vals, count_vals):
+        fig.add_trace(
+            go.Scatter(
+                x=[count, gross],
+                y=[y, y],
+                mode="lines",
+                line={"color": "#B0B0B0", "width": 2},
+                showlegend=False,
+                hoverinfo="skip",
+            )
+        )
+
+    fig.add_trace(
+        go.Scatter(
+            x=count_vals,
+            y=y_vals,
+            mode="markers",
+            marker={"size": 10, "color": "#4C78A8"},
+            name="Share of locations",
+            hovertemplate="%{y}<br>Location share: %{x:.1%}<extra></extra>",
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=gross_vals,
+            y=y_vals,
+            mode="markers",
+            marker={"size": 10, "color": "#F58518"},
+            name="Share of revenue",
+            hovertemplate="%{y}<br>Revenue share: %{x:.1%}<extra></extra>",
+        )
+    )
+
+    fig.update_layout(
+        title=title,
+        xaxis_title="Share of total",
+        yaxis_title="Timing type",
+        xaxis_tickformat=".0%",
+        height=360,
+        template="plotly_white",
+        legend={"orientation": "h", "y": -0.15},
+    )
+    return fig
+
+
+def build_timing_boxplot(df, title, label_col=None):
+    fig = go.Figure()
+    for timing_type in ["EARLY_ADOPTER", "BALANCED", "SLOW_BURN"]:
+        subset = df[df["timing_class"] == timing_type]
+        data = subset["total_gross"]
+        customdata = None
+        hovertemplate = "<b>%{fullData.name}</b><br>Total gross: $%{y:,.0f}<extra></extra>"
+        if label_col and label_col in subset.columns:
+            customdata = subset[label_col].astype(str)
+            hovertemplate = (
+                "<b>%{fullData.name}</b><br>"
+                "Location: %{customdata}<br>"
+                "Total gross: $%{y:,.0f}<extra></extra>"
+            )
+        fig.add_trace(
+            go.Box(
+                y=data,
+                name=timing_type,
+                marker_color=TIMING_COLORS.get(timing_type, "#777777"),
+                boxmean="sd",
+                boxpoints="all",
+                jitter=0.35,
+                pointpos=0,
+                customdata=customdata,
+                hovertemplate=hovertemplate,
+            )
+        )
+    fig.update_layout(
+        title=title,
+        yaxis_title="Total gross (log scale)",
+        xaxis_title="Timing type",
+        yaxis_type="log",
+        height=420,
+        width=1000,
+        showlegend=False,
+        template="plotly_white",
+    )
+    return fig
+
+
+def build_speed_dumbbell(df, title, metric):
+    rows = []
+    for timing_type in ["EARLY_ADOPTER", "BALANCED", "SLOW_BURN"]:
+        data = (
+            df[df["timing_class"] == timing_type][metric]
+            .dropna()
+            .astype(float)
+        )
+        if data.empty:
+            continue
+        rows.append(
+            {
+                "timing_class": timing_type,
+                "p25": data.quantile(0.25),
+                "median": data.quantile(0.5),
+                "p75": data.quantile(0.75),
+                "count": len(data),
+            }
+        )
+
+    if not rows:
+        raise ValueError("No data for speed interval plot.")
+
+    summary = pd.DataFrame(rows)
+
+    fig = go.Figure()
+    for _, row in summary.iterrows():
+        timing_type = row["timing_class"]
+        color = TIMING_COLORS.get(timing_type, "#777777")
+        fig.add_trace(
+            go.Scatter(
+                x=[row["p25"], row["p75"]],
+                y=[timing_type, timing_type],
+                mode="lines",
+                line={"color": color, "width": 3},
+                hovertemplate=(
+                    f"{timing_type}<br>"
+                    f"P25: {row['p25']:.0f} w<br>"
+                    f"Median: {row['median']:.0f} w<br>"
+                    f"P75: {row['p75']:.0f} w<br>"
+                    f"N: {int(row['count'])}<extra></extra>"
+                ),
+                showlegend=False,
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=[row["p25"], row["p75"]],
+                y=[timing_type, timing_type],
+                mode="markers",
+                marker={
+                    "size": 9,
+                    "color": "#ffffff",
+                    "line": {"width": 2, "color": color},
+                },
+                hoverinfo="skip",
+                showlegend=False,
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=[row["median"]],
+                y=[timing_type],
+                mode="markers",
+                marker={
+                    "size": 12,
+                    "color": color,
+                    "line": {"width": 1, "color": "#ffffff"},
+                },
+                hoverinfo="skip",
+                showlegend=False,
+            )
+        )
+
+    fig.update_layout(
+        title=title,
+        xaxis_title="Weeks to reach 80% of total gross (P25–P75 with median)",
+        yaxis_title="Timing type",
+        height=420,
+        width=1000,
+        template="plotly_white",
+    )
+    return fig
+
+
+def build_timing_spotlight_table(df, label_col, top_n=5):
+    df = df.copy()
+    df = df[df["total_gross"] > 0].copy()
+    if df.empty:
+        return ""
+
+    early = df.sort_values("weighted_early_share", ascending=False).head(top_n)
+    slow = df.sort_values("weighted_early_share", ascending=True).head(top_n)
+
+    rows = []
+    for tag, block in (("Early adopter", early), ("Slow burn", slow)):
+        for _, row in block.iterrows():
+            rows.append(
+                "<tr>"
+                f"<td>{tag}</td>"
+                f"<td>{row[label_col]}</td>"
+                f"<td>${row['total_gross']:,.0f}</td>"
+                f"<td>{row['weighted_early_share']:.2f}</td>"
+                "</tr>"
+            )
+
+    return (
+        "<table class=\"spotlight-table\">"
+        "<thead><tr>"
+        "<th>Type</th>"
+        "<th>Location</th>"
+        "<th>Total gross</th>"
+        "<th>Early share</th>"
+        "</tr></thead>"
+        "<tbody>"
+        + "".join(rows)
+        + "</tbody></table>"
+    )
+
+
+def build_q1_scatter(df, title, label_col, top_label_n=8):
+    df = df.copy()
+    df = df[(df["mean_weekly_gross"] > 0) & (df["cv"].notna())].copy()
+    if df.empty:
+        raise ValueError("No data for Q1 scatter.")
+
+    df["label_text"] = ""
+    if top_label_n > 0:
+        top_rows = df.nlargest(top_label_n, "mean_weekly_gross")
+        df.loc[top_rows.index, "label_text"] = df[label_col]
+
+    max_gross = df["mean_weekly_gross"].max()
+    df["bubble_size"] = 12 + 28 * (df["mean_weekly_gross"] / max_gross)
+
+    fig = go.Figure()
+    for risk in RISK_ORDER:
+        group = df[df["risk_category"] == risk]
+        if group.empty:
+            continue
+        fig.add_trace(
+            go.Scatter(
+                x=group["mean_weekly_gross"],
+                y=group["cv"],
+                mode="markers+text",
+                text=group["label_text"],
+                textposition="top center",
+                marker={
+                    "size": group["bubble_size"],
+                    "color": RISK_COLORS.get(risk, "#777777"),
+                    "opacity": 0.8,
+                    "line": {"width": 0.6, "color": "#ffffff"},
+                },
+                name=risk,
+                customdata=np.stack(
+                    [
+                        group[label_col],
+                        group["mean_weekly_gross"],
+                        group["cv"],
+                        group["weeks_count"],
+                    ],
+                    axis=-1,
+                ),
+                hovertemplate=(
+                    "Location: %{customdata[0]}<br>"
+                    "Avg weekly gross: $%{customdata[1]:,.0f}<br>"
+                    "Volatility (CV): %{customdata[2]:.2f}<br>"
+                    "Weeks observed: %{customdata[3]:.0f}<extra></extra>"
+                ),
+            )
+        )
+
+    fig.update_layout(
+        title=title,
+        xaxis_title="Average weekly gross (log scale)",
+        yaxis_title="Volatility (CV)",
+        xaxis_type="log",
+        height=520,
+        width=1000,
+        hovermode="closest",
+        template="plotly_white",
+    )
+    return fig
+
+
+def build_risk_share_comparison(df, title):
+    df = df.copy()
+    df = df[(df["mean_weekly_gross"] > 0) & (df["weeks_count"] > 0)]
+    df["total_gross"] = df["mean_weekly_gross"] * df["weeks_count"]
+    summary = (
+        df.groupby("risk_category")
+        .agg(total_gross=("total_gross", "sum"), count=("total_gross", "size"))
+        .reindex(RISK_ORDER)
+        .fillna(0)
+    )
+    if summary.empty:
+        raise ValueError("No data for risk share comparison.")
+
+    summary["gross_share"] = summary["total_gross"] / summary["total_gross"].sum()
+    summary["count_share"] = summary["count"] / summary["count"].sum()
+
+    y_vals = summary.index.tolist()
+    gross_vals = summary["gross_share"].tolist()
+    count_vals = summary["count_share"].tolist()
+
+    fig = go.Figure()
+    for y, gross, count in zip(y_vals, gross_vals, count_vals):
+        color = RISK_COLORS.get(y, "#777777")
+        fig.add_trace(
+            go.Scatter(
+                x=[count, gross],
+                y=[y, y],
+                mode="lines",
+                line={"color": "#B0B0B0", "width": 2},
+                showlegend=False,
+                hoverinfo="skip",
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=[count],
+                y=[y],
+                mode="markers",
+                marker={"size": 10, "color": color},
+                hovertemplate=f"{y}<br>Location share: %{{x:.1%}}<extra></extra>",
+                showlegend=False,
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=[gross],
+                y=[y],
+                mode="markers",
+                marker={"size": 10, "color": color, "symbol": "diamond"},
+                hovertemplate=f"{y}<br>Revenue share: %{{x:.1%}}<extra></extra>",
+                showlegend=False,
+            )
+        )
+
+    fig.update_layout(
+        title=title,
+        xaxis_title="Share of total",
+        yaxis_title="Risk category",
+        xaxis_tickformat=".0%",
+        height=360,
+        template="plotly_white",
+    )
+    return fig
+
+
+def build_q1_spotlight_table(df, label_col, top_n=6):
+    df = df.copy()
+    df = df[(df["mean_weekly_gross"] > 0) & (df["cv"].notna())].copy()
+    if df.empty:
+        return ""
+
+    df["total_gross"] = df["mean_weekly_gross"] * df["weeks_count"]
+    stable = (
+        df[df["risk_category"] == "Safer (Stable)"]
+        .sort_values("total_gross", ascending=False)
+        .head(top_n)
+    )
+    volatile = (
+        df[df["risk_category"].isin(["Higher-Risk (Volatile)", "Highly Volatile"])]
+        .sort_values("total_gross", ascending=False)
+        .head(top_n)
+    )
+
+    rows = []
+    for tag, block in (("Stable", stable), ("Volatile", volatile)):
+        for _, row in block.iterrows():
+            rows.append(
+                "<tr>"
+                f"<td>{tag}</td>"
+                f"<td>{row[label_col]}</td>"
+                f"<td>${row['total_gross']:,.0f}</td>"
+                f"<td>{row['cv']:.2f}</td>"
+                "</tr>"
+            )
+
+    return (
+        "<table class=\"spotlight-table\">"
+        "<thead><tr>"
+        "<th>Type</th>"
+        "<th>Location</th>"
+        "<th>Total gross</th>"
+        "<th>CV</th>"
+        "</tr></thead>"
+        "<tbody>"
+        + "".join(rows)
+        + "</tbody></table>"
+    )
+
+
+def build_cv_distribution_plot(df, title):
+    df = df.copy()
+    df = df[df["cv"].notna()]
+    if df.empty:
+        raise ValueError("No data for CV distribution plot.")
+
+    fig = go.Figure()
+    for risk in RISK_ORDER:
+        data = df[df["risk_category"] == risk]["cv"]
+        if data.empty:
+            continue
+        fig.add_trace(
+            go.Violin(
+                y=data,
+                name=risk,
+                box_visible=True,
+                meanline_visible=True,
+                marker_color=RISK_COLORS.get(risk, "#777777"),
+                line_width=1,
+                hovertemplate=f"{risk}<br>CV: %{{y:.2f}}<extra></extra>",
+            )
+        )
+
+    fig.update_layout(
+        title=title,
+        yaxis_title="Volatility (CV)",
+        xaxis_title="Risk category",
+        height=420,
+        width=1000,
+        template="plotly_white",
+        showlegend=False,
+    )
+    return fig
+
+
+def build_weighted_cv_histogram(df, title):
+    df = df.copy()
+    df = df[(df["mean_weekly_gross"] > 0) & (df["weeks_count"] > 0) & (df["cv"].notna())]
+    if df.empty:
+        raise ValueError("No data for weighted CV histogram.")
+
+    df["total_gross"] = df["mean_weekly_gross"] * df["weeks_count"]
+
+    fig = go.Figure(
+        data=[
+            go.Histogram(
+                x=df["cv"],
+                y=df["total_gross"],
+                histfunc="sum",
+                nbinsx=20,
+                marker_color="#4C78A8",
+                opacity=0.85,
+                hovertemplate="CV bin<br>Revenue: $%{y:,.0f}<extra></extra>",
+            )
+        ]
+    )
+    fig.update_layout(
+        title=title,
+        xaxis_title="Volatility (CV)",
+        yaxis_title="Total gross (revenue-weighted)",
+        height=420,
+        width=1000,
+        template="plotly_white",
+    )
+    return fig
+
+
+def pick_top_labels_by_risk(df, label_col, top_n=6):
+    df = df.copy()
+    df = df[(df["mean_weekly_gross"] > 0) & (df["weeks_count"] > 0) & (df["cv"].notna())]
+    df["total_gross"] = df["mean_weekly_gross"] * df["weeks_count"]
+
+    stable = (
+        df[df["risk_category"] == "Safer (Stable)"]
+        .sort_values("total_gross", ascending=False)
+        .head(top_n)
+    )
+    volatile = (
+        df[df["risk_category"].isin(["Higher-Risk (Volatile)", "Highly Volatile"])]
+        .sort_values("total_gross", ascending=False)
+        .head(top_n)
+    )
+
+    combined = pd.concat([stable, volatile], ignore_index=True)
+    return combined[label_col].dropna().tolist()
+
+
+def build_volatility_heatmap(weekly_df, label_col, title, top_labels):
+    df = weekly_df.copy()
+    df = df[df[label_col].isin(top_labels)].copy()
+    if df.empty:
+        raise ValueError("No data for volatility heatmap.")
+
+    pivot = (
+        df.pivot_table(
+            index=label_col,
+            columns="week_start",
+            values="weekly_gross",
+            aggfunc="sum",
+        )
+        .sort_index()
+    )
+    if pivot.empty:
+        raise ValueError("No data for volatility heatmap.")
+
+    log_vals = np.log1p(pivot)
+    row_mean = log_vals.mean(axis=1)
+    row_std = log_vals.std(axis=1).replace(0, np.nan)
+    z_scores = (log_vals.sub(row_mean, axis=0)).div(row_std, axis=0).fillna(0)
+
+    x_labels = [c.strftime("%Y-%m-%d") if hasattr(c, "strftime") else str(c) for c in z_scores.columns]
+    fig = go.Figure(
+        data=[
+            go.Heatmap(
+                z=z_scores.values,
+                x=x_labels,
+                y=z_scores.index.tolist(),
+                colorscale="RdBu_r",
+                zmid=0,
+                colorbar={"title": "Relative weekly performance"},
+                hovertemplate="Location: %{y}<br>Week: %{x}<br>Z: %{z:.2f}<extra></extra>",
+            )
+        ]
+    )
+    fig.update_layout(
+        title=title,
+        xaxis_title="Week start",
+        yaxis_title="Location",
+        height=520,
+        width=1000,
+        template="plotly_white",
+    )
+    return fig
+
+
+def build_timing_mix_by_state(df, title):
+    df = df.copy()
+    if df.empty:
+        raise ValueError("No data for timing mix by state.")
+
+    counts = (
+        df.groupby(["state", "timing_class"])
+        .size()
+        .reset_index(name="count")
+    )
+    state_order = (
+        counts.groupby("state")["count"].sum().sort_values(ascending=False).index.tolist()
+    )
+
+    fig = go.Figure()
+    for timing_type in ["EARLY_ADOPTER", "BALANCED", "SLOW_BURN"]:
+        subset = counts[counts["timing_class"] == timing_type]
+        fig.add_trace(
+            go.Bar(
+                x=subset["state"],
+                y=subset["count"],
+                name=timing_type,
+                marker_color=TIMING_COLORS.get(timing_type, "#777777"),
+                hovertemplate="%{x}<br>%{fullData.name}: %{y}<extra></extra>",
+            )
+        )
+
+    fig.update_layout(
+        title=title,
+        barmode="stack",
+        xaxis_title="State",
+        yaxis_title="Number of locations",
+        height=420,
+        width=1000,
+        template="plotly_white",
+        xaxis={"categoryorder": "array", "categoryarray": state_order},
+    )
+    return fig
+
+
+def build_cumulative_share_by_week(weekly_df, timing_df, join_cols, title):
+    df = weekly_df.merge(
+        timing_df[join_cols + ["timing_class"]],
+        on=join_cols,
+        how="left",
+    )
+    df = df.dropna(subset=["timing_class"])
+    if df.empty:
+        raise ValueError("No data for cumulative share by week.")
+
+    agg = (
+        df.groupby(["timing_class", "rel_week"])["weekly_gross"]
+        .sum()
+        .reset_index()
+        .sort_values(["timing_class", "rel_week"])
+    )
+
+    classes = ["EARLY_ADOPTER", "BALANCED", "SLOW_BURN"]
+    fig = make_subplots(rows=1, cols=3, subplot_titles=classes)
+
+    for idx, timing_type in enumerate(classes, start=1):
+        data = agg[agg["timing_class"] == timing_type].copy()
+        if data.empty:
+            continue
+        total = data["weekly_gross"].sum()
+        data["cum_share"] = data["weekly_gross"].cumsum() / total if total > 0 else 0
+        fig.add_trace(
+            go.Scatter(
+                x=data["rel_week"],
+                y=data["cum_share"],
+                mode="lines+markers",
+                line={"color": TIMING_COLORS.get(timing_type, "#777777")},
+                showlegend=False,
+                hovertemplate="Week %{x}<br>Cumulative share: %{y:.0%}<extra></extra>",
+            ),
+            row=1,
+            col=idx,
+        )
+
+    fig.update_layout(
+        title=title,
+        height=420,
+        width=1000,
+        template="plotly_white",
+        yaxis_tickformat=".0%",
+    )
+    return fig
+
+
+def build_timing_pareto(df, title, label_col):
+    fig = go.Figure()
+    for timing_type in ["EARLY_ADOPTER", "BALANCED", "SLOW_BURN"]:
+        subset = df[df["timing_class"] == timing_type].copy()
+        if subset.empty:
+            continue
+        subset = subset.sort_values("total_gross", ascending=False)
+        subset["rank"] = np.arange(1, len(subset) + 1)
+        subset["cum_share"] = subset["total_gross"].cumsum() / subset["total_gross"].sum()
+        subset["rank_share"] = subset["rank"] / len(subset)
+
+        fig.add_trace(
+            go.Scatter(
+                x=subset["rank_share"],
+                y=subset["cum_share"],
+                mode="lines",
+                name=timing_type,
+                line={"color": TIMING_COLORS.get(timing_type, "#777777"), "width": 2},
+                hovertemplate="Top %{x:.0%} locations<br>Share: %{y:.0%}<extra></extra>",
+            )
+        )
+
+    fig.update_layout(
+        title=title,
+        xaxis_title="Share of locations (ranked by gross)",
+        yaxis_title="Cumulative share of gross",
+        xaxis_tickformat=".0%",
+        yaxis_tickformat=".0%",
+        height=420,
+        width=1000,
+        template="plotly_white",
+    )
+    return fig
+
+
+def write_story_levels_html(output_path, levels, title, intro):
+    level_blocks = []
+    first_fig = True
+    first_level = True
+
+    for level in levels:
+        key = str(level.get("key", "")).strip()
+        label = str(level.get("label", key)).strip() or key
+        intro_text = str(level.get("intro", "")).strip()
+
+        chart_blocks = []
+        for chart in level.get("charts", []):
+            heading = str(chart.get("heading", "")).strip()
+            lead = str(chart.get("lead", "")).strip()
+            fig = chart.get("fig")
+            if fig is None:
+                continue
+            chart_html = _fig_to_html(fig, include_plotlyjs=first_fig)
+            first_fig = False
+            chart_blocks.append(
+                f"""
+                <section class="card">
+                  <h3>{heading}</h3>
+                  <p class="lead">{lead}</p>
+                  <div class="plot">{chart_html}</div>
+                </section>
+                """
+            )
+
+        highlight_block = ""
+        highlight = level.get("highlight") or {}
+        highlight_heading = str(highlight.get("heading", "")).strip()
+        highlight_note = str(highlight.get("note", "")).strip()
+        highlight_fig = highlight.get("fig")
+        if highlight_heading and highlight_fig is not None:
+            highlight_html = _fig_to_html(highlight_fig, include_plotlyjs=first_fig)
+            first_fig = False
+            highlight_block = f"""
+            <section class="card highlight-card">
+              <h3>{highlight_heading}</h3>
+              <p class="lead">{highlight_note}</p>
+              <div class="plot">{highlight_html}</div>
+            </section>
+            """
+
+        spotlight_block = ""
+        spotlight = level.get("spotlight") or {}
+        spotlight_heading = str(spotlight.get("heading", "")).strip()
+        spotlight_note = str(spotlight.get("note", "")).strip()
+        spotlight_html = spotlight.get("html", "")
+        if spotlight_heading and spotlight_html:
+            spotlight_block = f"""
+            <section class="card spotlight-card">
+              <h3>{spotlight_heading}</h3>
+              <p class="lead">{spotlight_note}</p>
+              {spotlight_html}
+            </section>
+            """
+
+        appendix_block = ""
+        appendix = level.get("appendix", [])
+        if appendix:
+            appendix_sections = []
+            for item in appendix:
+                heading = str(item.get("heading", "")).strip()
+                lead = str(item.get("lead", "")).strip()
+                fig = item.get("fig")
+                if fig is None:
+                    continue
+                appendix_html = _fig_to_html(fig, include_plotlyjs=first_fig)
+                first_fig = False
+                appendix_sections.append(
+                    f"""
+                    <section class="card">
+                      <h3>{heading}</h3>
+                      <p class="lead">{lead}</p>
+                      <div class="plot">{appendix_html}</div>
+                    </section>
+                    """
+                )
+            if appendix_sections:
+                appendix_block = f"""
+                <details class="appendix">
+                  <summary>Analyst Appendix</summary>
+                  {''.join(appendix_sections)}
+                </details>
+                """
+
+        display_style = "block" if first_level else "none"
+        first_level = False
+        level_blocks.append(
+            f"""
+            <div class="level-section" id="level-{key}" style="display: {display_style};">
+              <section class="card">
+                <h2>{label} level</h2>
+                <p class="lead">{intro_text}</p>
+              </section>
+              {''.join(chart_blocks)}
+              {highlight_block}
+              {spotlight_block}
+              {appendix_block}
+            </div>
+            """
+        )
+
+    options_html = "\n".join(
+        [f'<option value="{level.get("key")}">{level.get("label")}</option>' for level in levels]
+    )
+
+    wrapper = f"""<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <style>
+      body {{
+        margin: 0;
+        font-family: Arial, sans-serif;
+        color: #1b1b1b;
+        background: #f6f6f6;
+      }}
+      main {{
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 24px;
+      }}
+      h1 {{
+        margin: 0 0 6px 0;
+        font-size: 28px;
+      }}
+      h2 {{
+        margin: 6px 0 10px 0;
+        font-size: 22px;
+      }}
+      h3 {{
+        margin: 6px 0 10px 0;
+        font-size: 18px;
+      }}
+      .lead {{
+        margin: 0 0 12px 0;
+        color: #444;
+        font-size: 14px;
+      }}
+      .toolbar {{
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 16px;
+        border: 1px solid #e5e5e5;
+        border-radius: 12px;
+        background: #ffffff;
+        margin-bottom: 18px;
+      }}
+      .card {{
+        background: #ffffff;
+        border: 1px solid #e5e5e5;
+        border-radius: 12px;
+        padding: 16px 18px;
+        margin-bottom: 18px;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+      }}
+      .plot {{
+        width: 100%;
+      }}
+      .plot .plotly-graph-div {{
+        width: 100% !important;
+      }}
+      .spotlight-table {{
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }}
+      .spotlight-table th,
+      .spotlight-table td {{
+        padding: 8px 10px;
+        border-bottom: 1px solid #e5e5e5;
+        text-align: left;
+      }}
+      .spotlight-table th {{
+        background: #f8f8f8;
+      }}
+      details.appendix {{
+        margin-bottom: 18px;
+      }}
+      details.appendix summary {{
+        cursor: pointer;
+        font-weight: 600;
+        margin-bottom: 12px;
+      }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="card">
+        <h1>{title}</h1>
+        <p class="lead">{intro}</p>
+      </section>
+      <div class="toolbar">
+        <label for="levelSelect"><strong>Level</strong></label>
+        <select id="levelSelect">{options_html}</select>
+      </div>
+      {''.join(level_blocks)}
+    </main>
+    <script>
+      const select = document.getElementById('levelSelect');
+      function showLevel(levelKey) {{
+        document.querySelectorAll('.level-section').forEach(section => {{
+          section.style.display = 'none';
+        }});
+        const active = document.getElementById('level-' + levelKey);
+        if (!active) return;
+        active.style.display = 'block';
+        active.querySelectorAll('.plotly-graph-div').forEach(plotDiv => {{
+          if (plotDiv && window.Plotly) {{
+            Plotly.Plots.resize(plotDiv);
+          }}
+        }});
+      }}
+
+      select.addEventListener('change', event => {{
+        showLevel(event.target.value);
+      }});
+      if (select.value) {{
+        showLevel(select.value);
+      }}
+    </script>
+  </body>
+</html>
+"""
+
+    output_path.write_text(wrapper, encoding="utf-8")
+
+# Build Q1 story page with synced level toggle
+city_q1 = city_stats_f.copy()
+city_q1["label"] = city_q1["state"] + " | " + city_q1["city"]
+
+cinema_q1 = cinema_stats_f.copy()
+cinema_q1["label"] = cinema_q1["state"] + " | " + cinema_q1["theatre_name"]
+
+city_q1_scatter = build_q1_scatter(
+    city_q1,
+    title="Stability vs volatility (Cities)",
+    label_col="label",
+    top_label_n=Q2_LABEL_TOP_N,
+)
+cinema_q1_scatter = build_q1_scatter(
+    cinema_q1,
+    title="Stability vs volatility (Cinemas)",
+    label_col="label",
+    top_label_n=Q2_LABEL_TOP_N,
+)
+
+city_q1_share = build_risk_share_comparison(
+    city_q1,
+    title="Revenue share vs location share (Cities)",
+)
+cinema_q1_share = build_risk_share_comparison(
+    cinema_q1,
+    title="Revenue share vs location share (Cinemas)",
+)
+
+city_q1_cv_fig = build_cv_distribution_plot(
+    city_q1,
+    title="CV distribution by risk category (Cities)",
+)
+cinema_q1_cv_fig = build_cv_distribution_plot(
+    cinema_q1,
+    title="CV distribution by risk category (Cinemas)",
+)
+
+city_q1_hist_fig = build_weighted_cv_histogram(
+    city_q1,
+    title="Revenue-weighted CV distribution (Cities)",
+)
+cinema_q1_hist_fig = build_weighted_cv_histogram(
+    cinema_q1,
+    title="Revenue-weighted CV distribution (Cinemas)",
+)
+
+city_heatmap_labels = pick_top_labels_by_risk(city_q1, "label", Q1_SPOTLIGHT_TOP_N)
+cinema_heatmap_labels = pick_top_labels_by_risk(cinema_q1, "label", Q1_SPOTLIGHT_TOP_N)
+
+weekly_city_heat = weekly_city.copy()
+weekly_city_heat["label"] = weekly_city_heat["state"] + " | " + weekly_city_heat["city"]
+city_q1_heatmap = build_volatility_heatmap(
+    weekly_city_heat,
+    label_col="label",
+    title="Volatility fingerprint by week (Cities)",
+    top_labels=city_heatmap_labels,
+)
+
+weekly_cinema_heat = weekly_cinema.copy()
+weekly_cinema_heat["label"] = (
+    weekly_cinema_heat["state"] + " | " + weekly_cinema_heat["theatre_name"]
+)
+cinema_q1_heatmap = build_volatility_heatmap(
+    weekly_cinema_heat,
+    label_col="label",
+    title="Volatility fingerprint by week (Cinemas)",
+    top_labels=cinema_heatmap_labels,
+)
+
+q1_levels = [
+    {
+        "key": "city",
+        "label": "City",
+        "intro": "City view shows which locations are stable versus volatile.",
+        "charts": [
+            {
+                "heading": "Stability vs volatility map",
+                "lead": "Average weekly gross vs volatility (CV). Bigger bubbles = larger markets.",
+                "fig": city_q1_scatter,
+            },
+        ],
+        "highlight": {
+            "heading": "Revenue share vs location share",
+            "note": "Compare each risk category's share of revenue vs its share of cities.",
+            "fig": city_q1_share,
+        },
+        "spotlight": {
+            "heading": "City spotlights",
+            "note": "Top stable and volatile cities by total gross.",
+            "html": build_q1_spotlight_table(city_q1, "label", Q1_SPOTLIGHT_TOP_N),
+        },
+        "appendix": [
+            {
+                "heading": "CV distribution by risk category",
+                "lead": "Shows the spread of volatility within each risk tier.",
+                "fig": city_q1_cv_fig,
+            },
+            {
+                "heading": "Revenue-weighted CV histogram",
+                "lead": "Highlights where most revenue sits across volatility levels.",
+                "fig": city_q1_hist_fig,
+            },
+            {
+                "heading": "Volatility heatmap by week",
+                "lead": "Relative weekly performance for top stable and volatile cities.",
+                "fig": city_q1_heatmap,
+            },
+        ],
+    },
+    {
+        "key": "cinema",
+        "label": "Cinema",
+        "intro": "Cinema view highlights reliable venues versus high-variance opportunities.",
+        "charts": [
+            {
+                "heading": "Stability vs volatility map",
+                "lead": "Average weekly gross vs volatility (CV). Bigger bubbles = larger markets.",
+                "fig": cinema_q1_scatter,
+            },
+        ],
+        "highlight": {
+            "heading": "Revenue share vs location share",
+            "note": "Compare each risk category's share of revenue vs its share of cinemas.",
+            "fig": cinema_q1_share,
+        },
+        "spotlight": {
+            "heading": "Cinema spotlights",
+            "note": "Top stable and volatile cinemas by total gross.",
+            "html": build_q1_spotlight_table(cinema_q1, "label", Q1_SPOTLIGHT_TOP_N),
+        },
+        "appendix": [
+            {
+                "heading": "CV distribution by risk category",
+                "lead": "Shows the spread of volatility within each risk tier.",
+                "fig": cinema_q1_cv_fig,
+            },
+            {
+                "heading": "Revenue-weighted CV histogram",
+                "lead": "Highlights where most revenue sits across volatility levels.",
+                "fig": cinema_q1_hist_fig,
+            },
+            {
+                "heading": "Volatility heatmap by week",
+                "lead": "Relative weekly performance for top stable and volatile cinemas.",
+                "fig": cinema_q1_heatmap,
+            },
+        ],
+    },
+]
+
+write_story_levels_html(
+    output_path=Q1_STORY_HTML,
+    levels=q1_levels,
+    title="Q1 Stability vs Volatility - Full Story",
+    intro=(
+        "Use the level toggle to switch between city and cinema views. "
+        "Each level keeps charts and spotlights in sync."
+    ),
+)
+
+# ============================================================================
+# QUESTION 2: Early Adopter vs Slow Burn
+# ============================================================================
+# Which places watch Indian movies right away in the first 1-2 weeks, and 
+# which places take longer to build up?
+
+print("\n" + "="*80)
+print("QUESTION 2: Early Adopter vs Slow Burn")
+print("="*80)
+
+# Find & connect to database
+db_path = find_database_path(DATA_DIR / "numero_data.sqlite")
+conn = sqlite3.connect(db_path)
+print(f"\nDB: {db_path}")
+
+# Load raw sales table
+sales_raw = pd.read_sql("SELECT * FROM sales_raw_data", conn)
+film_meta = pd.read_sql("SELECT * FROM film_metadata", conn)
+indian_titles = pd.read_sql("SELECT * FROM indian_titles", conn)
+
+print(f"sales_raw: {sales_raw.shape}")
+print(f"film_meta: {film_meta.shape}")
+print(f"indian_titles: {indian_titles.shape}")
+
+# Helper function to extract weekly gross from boxOffice JSON
+def weekly_gross_from_boxoffice(box_office: dict) -> float:
+    total = 0.0
+    if not isinstance(box_office, dict):
+        return 0.0
+    for i in range(1, 8):
+        di = box_office.get(f"day{i}", {})
+        if isinstance(di, dict):
+            v = di.get("today", 0) or 0
+            try:
+                total += float(v)
+            except (TypeError, ValueError):
+                continue
+    return total
+
+# Parse raw JSON and extract weekly sales by location
+rows_out = []
+
+for _, r in sales_raw.iterrows():
+    film_id = r["numero_film_id"]
+    raw_json = r.get("raw_json")
+    if not raw_json:
+        continue
+    try:
+        j = json.loads(raw_json)
+    except json.JSONDecodeError:
+        continue
+    if not isinstance(j, dict):
+        continue
+
+    for week_start, payload in j.items():
+        week_rows = payload.get("rows", []) if isinstance(payload, dict) else []
+        for rr in week_rows:
+            rows_out.append({
+                "numero_film_id": film_id,
+                "week_start": pd.to_datetime(week_start),
+                "state": rr.get("state"),
+                "city": rr.get("city"),
+                "theatre_name": rr.get("theatre"),
+                "region": rr.get("region"),
+                "circuit": rr.get("circuit"),
+                "weekly_gross": weekly_gross_from_boxoffice(rr.get("boxOffice", {})),
+            })
+
+sales_weekly = pd.DataFrame(rows_out)
+
+# Basic cleanup
+sales_weekly["weekly_gross"] = sales_weekly["weekly_gross"].fillna(0).astype(float)
+sales_weekly = sales_weekly.dropna(subset=["state", "city", "theatre_name", "week_start"])
+
+print(f"\nsales_weekly shape: {sales_weekly.shape}")
+print(f"weekly_gross <= 0 rows: {(sales_weekly['weekly_gross'] <= 0).sum()}")
+
+# Filter to Indian titles only
+sales_wt = sales_weekly.merge(
+    film_meta[["numero_film_id", "title"]],
+    on="numero_film_id",
+    how="left"
+)
+
+sales_wt["title"] = sales_wt["title"].astype(str).str.strip()
+indian_titles["title"] = indian_titles["title"].astype(str).str.strip()
+
+indian_only = sales_wt.merge(
+    indian_titles[["title"]].drop_duplicates(),
+    on="title",
+    how="inner"
+)
+
+indian_only = indian_only[indian_only["weekly_gross"] > 0].copy()
+
+print(f"indian_only: {indian_only.shape}")
+print(f"unique films: {indian_only['numero_film_id'].nunique()}")
+
+# Add relative week from first week
+indian_only["week_start"] = pd.to_datetime(indian_only["week_start"])
+
+def add_relative_week(df, group_cols):
+    df = df.copy()
+    first_week = (
+        df.groupby(group_cols, as_index=False)["week_start"]
+          .min()
+          .rename(columns={"week_start": "first_week_start"})
+    )
+    out = df.merge(first_week, on=group_cols, how="left")
+    out["rel_week"] = ((out["week_start"] - out["first_week_start"]).dt.days // 7) + 1
+    return out
+
+indian_cinema_rw = add_relative_week(
+    indian_only,
+    ["numero_film_id", "state", "city", "theatre_name"]
+)
+
+indian_city_rw = add_relative_week(
+    indian_only,
+    ["numero_film_id", "state", "city"]
+)
+
+indian_state_rw = add_relative_week(
+    indian_only,
+    ["numero_film_id", "state"]
+)
+
+print(f"cinema_rw: {indian_cinema_rw.shape}")
+print(f"city_rw: {indian_city_rw.shape}")
+print(f"state_rw: {indian_state_rw.shape}")
+
+# Build film-location timing analysis
+def build_film_location_timing(df, group_cols):
+    df = df.copy()
+
+    df["early_gross"] = np.where(df["rel_week"] <= 2, df["weekly_gross"], 0.0)
+    df["late_gross"]  = np.where(df["rel_week"] >= 3, df["weekly_gross"], 0.0)
+
+    out = (
+        df.groupby(group_cols, as_index=False)
+          .agg(
+              total_gross=("weekly_gross", "sum"),
+              early_gross=("early_gross", "sum"),
+              late_gross=("late_gross", "sum"),
+              weeks_active=("rel_week", "max")
+          )
+    )
+
+    out["early_share"] = np.where(out["total_gross"] > 0, out["early_gross"] / out["total_gross"], np.nan)
+    return out
+
+film_cinema_timing = build_film_location_timing(
+    indian_cinema_rw,
+    ["numero_film_id", "title", "state", "city", "theatre_name"]
+)
+
+film_city_timing = build_film_location_timing(
+    indian_city_rw,
+    ["numero_film_id", "title", "state", "city"]
+)
+
+film_state_timing = build_film_location_timing(
+    indian_state_rw,
+    ["numero_film_id", "title", "state"]
+)
+
+print(f"film_cinema_timing: {film_cinema_timing.shape}")
+print(f"film_city_timing: {film_city_timing.shape}")
+print(f"film_state_timing: {film_state_timing.shape}")
+
+# Build place summaries
+def safe_weighted_avg(values, weights):
+    values = pd.Series(values)
+    weights = pd.Series(weights).fillna(0)
+    wsum = weights.sum()
+    if wsum <= 0:
+        return np.nan
+    return np.average(values, weights=weights)
+
+def build_place_summary(film_location_timing, place_cols):
+    df = film_location_timing[film_location_timing["total_gross"] > 0].copy()
+    out = (
+        df.groupby(place_cols, as_index=False)
+          .apply(lambda g: pd.Series({
+              "total_gross": g["total_gross"].sum(),
+              "n_films": g["numero_film_id"].nunique(),
+              "weighted_early_share": safe_weighted_avg(g["early_share"], g["total_gross"])
+          }))
+          .reset_index(drop=True)
+    )
+    return out
+
+state_summary = build_place_summary(film_state_timing, ["state"])
+city_summary = build_place_summary(film_city_timing, ["state", "city"])
+cinema_summary = build_place_summary(film_cinema_timing, ["state", "city", "theatre_name"])
+
+print(f"state_summary: {state_summary.shape}")
+print(f"city_summary: {city_summary.shape}")
+print(f"cinema_summary: {cinema_summary.shape}")
+
+# Classify states by timing
+state_plot = (
+    state_summary[state_summary["total_gross"] > 0]
+    .sort_values("total_gross", ascending=False)
+    .copy()
+)
+
+q25_s = state_plot["weighted_early_share"].quantile(0.25)
+q75_s = state_plot["weighted_early_share"].quantile(0.75)
+
+def timing_class_state(x, q25, q75):
+    if x >= q75:
+        return "EARLY_ADOPTER"
+    if x <= q25:
+        return "SLOW_BURN"
+    return "BALANCED"
+
+state_plot["timing_class"] = state_plot["weighted_early_share"].apply(
+    lambda x: timing_class_state(x, q25_s, q75_s)
+)
+
+print("\nState timing classification:")
+print(f"q25_s={q25_s:.3f}, q75_s={q75_s:.3f}")
+print(state_plot["timing_class"].value_counts())
+
+# Classify cities by timing
+TOP_N = 36
+
+city_plot = (
+    city_summary[city_summary["total_gross"] > 0]
+    .sort_values("total_gross", ascending=False)
+    .head(TOP_N)
+    .copy()
+)
+
+q25 = city_plot["weighted_early_share"].quantile(0.25)
+q75 = city_plot["weighted_early_share"].quantile(0.75)
+
+def timing_class(x):
+    if x >= q75:
+        return "EARLY_ADOPTER"
+    elif x <= q25:
+        return "SLOW_BURN"
+    else:
+        return "BALANCED"
+
+city_plot["timing_class"] = city_plot["weighted_early_share"].apply(timing_class)
+
+print(f"\nCity timing classification (TOP_N={TOP_N}):")
+print(f"q25={q25:.3f}, q75={q75:.3f}")
+print(city_plot["timing_class"].value_counts())
+
+# Classify cinemas by timing
+TOP_N_CINEMA = 60
+
+cinema_plot = (
+    cinema_summary[cinema_summary["total_gross"] > 0]
+    .sort_values("total_gross", ascending=False)
+    .head(TOP_N_CINEMA)
+    .copy()
+)
+
+q25_c = cinema_plot["weighted_early_share"].quantile(0.25)
+q75_c = cinema_plot["weighted_early_share"].quantile(0.75)
+
+def timing_class_cinema(x, q25, q75):
+    if x >= q75:
+        return "EARLY_ADOPTER"
+    elif x <= q25:
+        return "SLOW_BURN"
+    else:
+        return "BALANCED"
+
+cinema_plot["timing_class"] = cinema_plot["weighted_early_share"].apply(lambda x: timing_class_cinema(x, q25_c, q75_c))
+
+print(f"\nCinema timing classification (TOP_N={TOP_N_CINEMA}):")
+print(f"q25_c={q25_c:.3f}, q75_c={q75_c:.3f}")
+print(cinema_plot["timing_class"].value_counts())
+
+# Calculate ramp-up speeds
+city_rw = indian_city_rw.copy()
+
+weekly_city_rel = (
+    city_rw
+    .groupby(['numero_film_id', 'title', 'state', 'city', 'rel_week'], as_index=False)['weekly_gross']
+    .sum()
+    .sort_values(['numero_film_id', 'state', 'city', 'rel_week'])
+)
+
+city_week = (
+    weekly_city_rel
+    .groupby(["state", "city", "rel_week"], as_index=False)["weekly_gross"]
+    .sum()
+)
+
+city_totals = (
+    city_week
+    .groupby(["state", "city"], as_index=False)["weekly_gross"]
+    .sum()
+    .rename(columns={"weekly_gross": "city_total_gross"})
+)
+
+city_week = city_week.merge(city_totals, on=["state", "city"], how="left")
+city_week["week_share"] = city_week["weekly_gross"] / city_week["city_total_gross"]
+
+city_week = city_week.sort_values(["state", "city", "rel_week"])
+city_week["cum_share"] = city_week.groupby(["state", "city"])["week_share"].cumsum()
+
+def first_week_reach(df, threshold):
+    hit = df.loc[df["cum_share"] >= threshold, "rel_week"]
+    return int(hit.min()) if len(hit) else np.nan
+
+city_speed = (
+    city_week
+    .sort_values(["state", "city", "rel_week"])
+    .groupby(["state", "city"], as_index=False)
+    .apply(lambda g: pd.Series({
+        "weeks_to_80": first_week_reach(g, 0.80),
+        "weeks_to_95": first_week_reach(g, 0.95),
+        "final_week": int(g["rel_week"].max()),
+    }))
+    .reset_index(drop=True)
+)
+
+print(f"\nCity speed statistics:")
+print(city_speed[["weeks_to_80","weeks_to_95","final_week"]].describe())
+
+# State ramp-up speeds
+state_week = (
+    indian_state_rw
+    .groupby(["state", "rel_week"], as_index=False)["weekly_gross"]
+    .sum()
+    .sort_values(["state", "rel_week"])
+)
+
+state_week["state_total_gross"] = state_week.groupby("state")["weekly_gross"].transform("sum")
+state_week["week_share"] = state_week["weekly_gross"] / state_week["state_total_gross"]
+state_week["cum_share"] = state_week.groupby("state")["week_share"].cumsum()
+
+state_speed = (
+    state_week
+    .groupby(["state"], as_index=False)
+    .apply(lambda g: pd.Series({
+        "weeks_to_80": first_week_reach(g, 0.80),
+        "weeks_to_95": first_week_reach(g, 0.95),
+        "final_week": int(g["rel_week"].max()),
+        "total_gross": float(g["weekly_gross"].sum())
+    }))
+    .reset_index(drop=True)
+)
+
+print(f"\nState speed statistics:")
+print(state_speed[["weeks_to_80","weeks_to_95","final_week","total_gross"]].describe())
+
+# Cinema ramp-up speeds
+cinema_week = (
+    indian_cinema_rw
+    .groupby(["state", "city", "theatre_name", "rel_week"], as_index=False)["weekly_gross"]
+    .sum()
+    .sort_values(["state", "city", "theatre_name", "rel_week"])
+)
+
+cinema_week["cinema_total_gross"] = cinema_week.groupby(
+    ["state", "city", "theatre_name"]
+)["weekly_gross"].transform("sum")
+
+cinema_week["week_share"] = cinema_week["weekly_gross"] / cinema_week["cinema_total_gross"]
+
+cinema_week["cum_share"] = cinema_week.groupby(
+    ["state", "city", "theatre_name"]
+)["week_share"].cumsum()
+
+cinema_speed = (
+    cinema_week.sort_values(["state", "city", "theatre_name", "rel_week"])
+    .groupby(["state", "city", "theatre_name"], as_index=False)
+    .apply(lambda g: pd.Series({
+        "weeks_to_80": first_week_reach(g, 0.80),
+        "weeks_to_95": first_week_reach(g, 0.95),
+        "final_week": int(g["rel_week"].max()),
+        "total_gross": float(g["weekly_gross"].sum())
+    }))
+    .reset_index(drop=True)
+)
+
+print(f"\nCinema speed statistics:")
+print(cinema_speed[["weeks_to_80","weeks_to_95","final_week","total_gross"]].describe())
+
+# Merge timing class with speed data
+city_speed_plot = city_speed.merge(
+    city_plot[["state", "city", "timing_class"]],
+    on=["state", "city"],
+    how="left"
+)
+
+state_speed_plot = state_speed.merge(
+    state_plot[["state", "timing_class"]],
+    on=["state"],
+    how="left"
+)
+
+cinema_speed_plot = cinema_speed.merge(
+    cinema_plot[["state", "city", "theatre_name", "timing_class"]],
+    on=["state", "city", "theatre_name"],
+    how="left"
+)
+
+print(f"\nCity speed plot shape: {city_speed_plot.shape}")
+print(f"State speed plot shape: {state_speed_plot.shape}")
+print(f"Cinema speed plot shape: {cinema_speed_plot.shape}")
+
+# Build Q2 story page with synced level toggle
+state_story_df = state_plot.copy()
+state_story_df["label"] = state_story_df["state"]
+
+city_story_df = city_plot.copy()
+city_story_df["label"] = city_story_df["state"] + " | " + city_story_df["city"]
+
+cinema_story_df = cinema_plot.copy()
+cinema_story_df["label"] = (
+    cinema_story_df["state"] + " | " + cinema_story_df["theatre_name"]
+)
+
+state_mix_fig = build_timing_mix_by_state(
+    state_plot,
+    title="Timing class mix by state (States)",
+)
+city_mix_fig = build_timing_mix_by_state(
+    city_plot,
+    title="Timing class mix by state (Cities)",
+)
+cinema_mix_fig = build_timing_mix_by_state(
+    cinema_plot,
+    title="Timing class mix by state (Cinemas)",
+)
+
+state_cum_fig = build_cumulative_share_by_week(
+    state_week,
+    state_plot,
+    join_cols=["state"],
+    title="Cumulative revenue share by week (States)",
+)
+city_cum_fig = build_cumulative_share_by_week(
+    city_week,
+    city_plot,
+    join_cols=["state", "city"],
+    title="Cumulative revenue share by week (Cities)",
+)
+cinema_cum_fig = build_cumulative_share_by_week(
+    cinema_week,
+    cinema_plot,
+    join_cols=["state", "city", "theatre_name"],
+    title="Cumulative revenue share by week (Cinemas)",
+)
+
+state_pareto_fig = build_timing_pareto(
+    state_plot,
+    title="Pareto of total gross by timing type (States)",
+    label_col="state",
+)
+city_pareto_fig = build_timing_pareto(
+    city_plot,
+    title="Pareto of total gross by timing type (Cities)",
+    label_col="city",
+)
+cinema_pareto_fig = build_timing_pareto(
+    cinema_plot,
+    title="Pareto of total gross by timing type (Cinemas)",
+    label_col="theatre_name",
+)
+
+state_timing_fig = build_timing_scatter(
+    state_story_df,
+    title="Timing map (States): Early adopter vs slow burn",
+    label_col="label",
+    q25=q25_s,
+    q75=q75_s,
+    top_label_n=Q2_LABEL_TOP_N,
+)
+city_timing_fig = build_timing_scatter(
+    city_story_df,
+    title="Timing map (Cities): Early adopter vs slow burn",
+    label_col="label",
+    q25=q25,
+    q75=q75,
+    top_label_n=Q2_LABEL_TOP_N,
+)
+cinema_timing_fig = build_timing_scatter(
+    cinema_story_df,
+    title="Timing map (Cinemas): Early adopter vs slow burn",
+    label_col="label",
+    q25=q25_c,
+    q75=q75_c,
+    top_label_n=Q2_LABEL_TOP_N,
+)
+
+state_revenue_fig = build_timing_boxplot(
+    state_story_df,
+    title="Revenue distribution by timing type (States)",
+    label_col="label",
+)
+city_revenue_fig = build_timing_boxplot(
+    city_story_df,
+    title="Revenue distribution by timing type (Cities)",
+    label_col="label",
+)
+cinema_revenue_fig = build_timing_boxplot(
+    cinema_story_df,
+    title="Revenue distribution by timing type (Cinemas)",
+    label_col="label",
+)
+
+state_speed_fig = build_speed_dumbbell(
+    state_speed_plot,
+    title="Ramp-up speed by timing type (States)",
+    metric="weeks_to_80",
+)
+city_speed_fig = build_speed_dumbbell(
+    city_speed_plot,
+    title="Ramp-up speed by timing type (Cities)",
+    metric="weeks_to_80",
+)
+cinema_speed_fig = build_speed_dumbbell(
+    cinema_speed_plot,
+    title="Ramp-up speed by timing type (Cinemas)",
+    metric="weeks_to_80",
+)
+
+state_share_fig = build_timing_share_comparison(
+    state_plot,
+    title="Revenue share vs location share (States)",
+)
+city_share_fig = build_timing_share_comparison(
+    city_plot,
+    title="Revenue share vs location share (Cities)",
+)
+cinema_share_fig = build_timing_share_comparison(
+    cinema_plot,
+    title="Revenue share vs location share (Cinemas)",
+)
+
+levels = [
+    {
+        "key": "state",
+        "label": "State",
+        "intro": "State view shows national early-adopter patterns and slow-burn regions.",
+        "charts": [
+            {
+                "heading": "Timing map",
+                "lead": "Early share vs total gross with timing thresholds.",
+                "fig": state_timing_fig,
+            },
+            {
+                "heading": "Revenue distribution",
+                "lead": "Total gross spread by timing type.",
+                "fig": state_revenue_fig,
+            },
+            {
+                "heading": "Ramp-up speed",
+                "lead": "Median and IQR weeks to reach 80% of total gross.",
+                "fig": state_speed_fig,
+            },
+        ],
+        "highlight": {
+            "heading": "Revenue share vs location share",
+            "note": "Compare revenue share against share of locations in each timing type.",
+            "fig": state_share_fig,
+        },
+        "spotlight": {
+            "heading": "State spotlights",
+            "note": "Top early adopters and slow-burn states.",
+            "html": build_timing_spotlight_table(state_story_df, "label", Q2_SPOTLIGHT_TOP_N),
+        },
+        "appendix": [
+            {
+                "heading": "Timing class mix by state",
+                "lead": "Stacked view of timing classes across states.",
+                "fig": state_mix_fig,
+            },
+            {
+                "heading": "Cumulative revenue share by week",
+                "lead": "Small multiples by timing class show ramp-up patterns.",
+                "fig": state_cum_fig,
+            },
+            {
+                "heading": "Pareto by timing class",
+                "lead": "How concentrated revenue is within each timing class.",
+                "fig": state_pareto_fig,
+            },
+        ],
+    },
+    {
+        "key": "city",
+        "label": "City",
+        "intro": "City view reveals which locations respond immediately versus slow build.",
+        "charts": [
+            {
+                "heading": "Timing map",
+                "lead": "Early share vs total gross with timing thresholds.",
+                "fig": city_timing_fig,
+            },
+            {
+                "heading": "Revenue distribution",
+                "lead": "Total gross spread by timing type.",
+                "fig": city_revenue_fig,
+            },
+            {
+                "heading": "Ramp-up speed",
+                "lead": "Median and IQR weeks to reach 80% of total gross.",
+                "fig": city_speed_fig,
+            },
+        ],
+        "highlight": {
+            "heading": "Revenue share vs location share",
+            "note": "Compare revenue share against share of locations in each timing type.",
+            "fig": city_share_fig,
+        },
+        "spotlight": {
+            "heading": "City spotlights",
+            "note": "Top early adopters and slow-burn cities.",
+            "html": build_timing_spotlight_table(city_story_df, "label", Q2_SPOTLIGHT_TOP_N),
+        },
+        "appendix": [
+            {
+                "heading": "Timing class mix by state",
+                "lead": "Stacked view of timing classes across states.",
+                "fig": city_mix_fig,
+            },
+            {
+                "heading": "Cumulative revenue share by week",
+                "lead": "Small multiples by timing class show ramp-up patterns.",
+                "fig": city_cum_fig,
+            },
+            {
+                "heading": "Pareto by timing class",
+                "lead": "How concentrated revenue is within each timing class.",
+                "fig": city_pareto_fig,
+            },
+        ],
+    },
+    {
+        "key": "cinema",
+        "label": "Cinema",
+        "intro": "Cinema view shows venue-level early demand and slower build patterns.",
+        "charts": [
+            {
+                "heading": "Timing map",
+                "lead": "Early share vs total gross with timing thresholds.",
+                "fig": cinema_timing_fig,
+            },
+            {
+                "heading": "Revenue distribution",
+                "lead": "Total gross spread by timing type.",
+                "fig": cinema_revenue_fig,
+            },
+            {
+                "heading": "Ramp-up speed",
+                "lead": "Median and IQR weeks to reach 80% of total gross.",
+                "fig": cinema_speed_fig,
+            },
+        ],
+        "highlight": {
+            "heading": "Revenue share vs location share",
+            "note": "Compare revenue share against share of locations in each timing type.",
+            "fig": cinema_share_fig,
+        },
+        "spotlight": {
+            "heading": "Cinema spotlights",
+            "note": "Top early adopters and slow-burn cinemas.",
+            "html": build_timing_spotlight_table(cinema_story_df, "label", Q2_SPOTLIGHT_TOP_N),
+        },
+        "appendix": [
+            {
+                "heading": "Timing class mix by state",
+                "lead": "Stacked view of timing classes across states.",
+                "fig": cinema_mix_fig,
+            },
+            {
+                "heading": "Cumulative revenue share by week",
+                "lead": "Small multiples by timing class show ramp-up patterns.",
+                "fig": cinema_cum_fig,
+            },
+            {
+                "heading": "Pareto by timing class",
+                "lead": "How concentrated revenue is within each timing class.",
+                "fig": cinema_pareto_fig,
+            },
+        ],
+    },
+]
+
+write_story_levels_html(
+    output_path=Q2_STORY_HTML,
+    levels=levels,
+    title="Q2 Early Adopter vs Slow Burn - Full Story",
+    intro=(
+        "Use the level toggle to switch between state, city, and cinema views. "
+        "Each level includes a timing map, revenue distribution, speed chart, and synced highlights."
+    ),
+)
+
+# Print market value breakdown by timing type
+print("\n" + "="*80)
+print("Q2 MARKET VALUE ANALYSIS")
+print("="*80)
+
+timing_breakdown = city_plot.groupby("timing_class")["total_gross"].agg(['sum', 'count', 'mean', 'median', 'min', 'max']).reset_index()
+total_market = city_plot['total_gross'].sum()
+
+print(f"\nTotal Market Value (Top 36 Cities): ${total_market:,.0f}")
+print(f"Average Revenue per City: ${total_market/len(city_plot):,.0f}\n")
+
+print(f'{"Timing Type":<20} {"Total Revenue":>18} {"# Cities":>10} {"Avg Revenue":>18} {"Median":>18}')
+print('-'*88)
+
+for _, row in timing_breakdown.iterrows():
+    timing_type = row['timing_class']
+    total = row['sum']
+    count = int(row['count'])
+    avg = row['mean']
+    median = row['median']
+    pct = 100 * total / total_market
+    print(f'{timing_type:<20} ${total:>17,.0f} {count:>10d} ${avg:>17,.0f} ${median:>17,.0f}')
+
+print('-'*88)
+print(f'\nMarket Share by Timing Type:')
+for _, row in timing_breakdown.iterrows():
+    timing_type = row['timing_class']
+    total = row['sum']
+    pct = 100 * total / total_market
+    count = int(row['count'])
+    print(f'  {timing_type:<18}: ${total:>17,.0f} ({pct:>5.1f}%)  [{count} cities]')
+
+print(f'\n  {"TOTAL":<18}: ${total_market:>17,.0f} (100.0%)  [{len(city_plot)} cities]')
+
+if WRITE_LEGACY_Q2_OUTPUTS:
+    # ============== Q2 VISUALIZATIONS ==============
+    WRITE_Q2_TIMING_MAP_PNG = False
+    WRITE_Q2_BOX_PNG = False
+    
+    # Create visualization: City timing map (bubble chart)
+    size = 300 + 2200 * (city_plot["total_gross"] / city_plot["total_gross"].max())
+    gross_line = city_plot["total_gross"].median()
+    
+    color_map = {
+        "EARLY_ADOPTER": "tab:blue",
+        "BALANCED": "tab:orange",
+        "SLOW_BURN": "tab:green"
+    }
+    
+    plt.figure(figsize=(14, 7))
+    
+    for c, g in city_plot.groupby("timing_class"):
+        plt.scatter(
+            g["weighted_early_share"],
+            g["total_gross"],
+            s=size.loc[g.index],
+            alpha=0.75,
+            label=f"{c} (n={len(g)})",
+            c=color_map[c],
+            edgecolor="white",
+            linewidth=0.7
+        )
+    
+    plt.axvline(q25, linestyle="--")
+    plt.axvline(q75, linestyle="--")
+    plt.axhline(gross_line, linestyle=":")
+    
+    plt.yscale("log")
+    plt.title("Timing Map (Cities): Early-adopter vs Slow-burn demand for Indian titles (classification thresholds)")
+    plt.xlabel("Early Share (Week 1-2 / Total Gross)")
+    plt.ylabel("Total Gross (log scale)")
+    plt.legend(loc="upper right")
+    plt.grid(True, alpha=0.25)
+    
+    for _, r in city_plot.iterrows():
+        plt.text(
+            r["weighted_early_share"],
+            r["total_gross"],
+            f"{r['state']} | {r['city']}",
+            fontsize=9,
+            ha="left",
+            va="bottom"
+        )
+    
+    plt.tight_layout()
+    if WRITE_Q2_TIMING_MAP_PNG:
+        plt.savefig(OUTPUT_DIR / "q2_cities_timing_map.png", dpi=100, bbox_inches='tight')
+    plt.close()
+    
+    # Create visualization: Cinema timing map (bubble chart)
+    size = 300 + 2200 * (cinema_plot["total_gross"] / cinema_plot["total_gross"].max())
+    gross_line = cinema_plot["total_gross"].median()
+    
+    plt.figure(figsize=(14, 7))
+    
+    for c, g in cinema_plot.groupby("timing_class"):
+        plt.scatter(
+            g["weighted_early_share"],
+            g["total_gross"],
+            s=size.loc[g.index],
+            alpha=0.75,
+            label=f"{c} (n={len(g)})",
+            c=color_map[c],
+            edgecolor="white",
+            linewidth=0.7
+        )
+    
+    plt.axvline(q25_c, linestyle="--")
+    plt.axvline(q75_c, linestyle="--")
+    plt.axhline(gross_line, linestyle=":")
+    
+    plt.yscale("log")
+    plt.title("Timing Map (Cinemas): Release first vs second wave (classification thresholds)")
+    plt.xlabel("Early Share (Week 1-2 / Total Gross)")
+    plt.ylabel("Total Gross (log scale)")
+    plt.legend(loc="upper right")
+    plt.grid(True, alpha=0.25)
+    
+    # Label top 3 cinemas per timing class
+    top_per_class = 3
+    for timing_type in ['EARLY_ADOPTER', 'BALANCED', 'SLOW_BURN']:
+        top_labels = (
+            cinema_plot[cinema_plot['timing_class'] == timing_type]
+            .sort_values("total_gross", ascending=False)
+            .head(top_per_class)
+        )
+        for _, r in top_labels.iterrows():
+            plt.text(
+                r["weighted_early_share"],
+                r["total_gross"],
+                f"{r['state']} | {r['theatre_name']}",
+                fontsize=9,
+                ha="left",
+                va="bottom"
+            )
+    
+    plt.tight_layout()
+    if WRITE_Q2_TIMING_MAP_PNG:
+        plt.savefig(OUTPUT_DIR / "q2_cinemas_timing_map.png", dpi=100, bbox_inches='tight')
+    plt.close()
+    
+    # Create visualization: Revenue comparison by timing type (Cities)
+    # Merge timing classification with city-level aggregated revenue data
+    city_timing_revenue = city_summary.merge(
+        city_plot[["state", "city", "timing_class"]],
+        on=["state", "city"],
+        how="left"
+    ).dropna(subset=['timing_class', 'total_gross'])
+    
+    fig = go.Figure()
+    
+    for timing_type in ['EARLY_ADOPTER', 'BALANCED', 'SLOW_BURN']:
+        # Show total gross per city (aggregated across all films)
+        data = city_timing_revenue[city_timing_revenue['timing_class'] == timing_type]['total_gross']
+        
+        fig.add_trace(go.Box(
+            y=data,
+            name=timing_type,
+            marker_color=TIMING_COLORS[timing_type],
+            boxmean='sd',  # Show mean and standard deviation
+            hovertemplate='<b>%{fullData.name}</b><br>Total Gross: $%{y:,.0f}<extra></extra>'
+        ))
+    
+    fig.update_layout(
+        title='Revenue Distribution by Timing Type (Cities)',
+        yaxis_title='Total Gross (log scale)',
+        xaxis_title='Timing Type',
+        yaxis_type='log',
+        height=600,
+        width=1000,
+        showlegend=True,
+        hovermode='closest',
+        template='plotly_white'
+    )
+    
+    fig.write_html(OUTPUT_DIR / "q2_cities_revenue_boxplot_interactive.html")
+    print("Saved: outputs_locationquestions/q2_cities_revenue_boxplot_interactive.html")
+    
+    if WRITE_Q2_BOX_PNG:
+        fig.write_image(OUTPUT_DIR / "q2_cities_revenue_boxplot.png", width=1000, height=600)
+        print("Saved: outputs_locationquestions/q2_cities_revenue_boxplot.png")
+    
+    # Print revenue statistics by timing type
+    print("\n" + "-"*80)
+    print("Revenue Statistics by Timing Type (Cities)")
+    print("-"*80)
+    for timing_type in ['EARLY_ADOPTER', 'BALANCED', 'SLOW_BURN']:
+        data = city_timing_revenue[city_timing_revenue['timing_class'] == timing_type]['total_gross']
+        print(f"\n{timing_type}:")
+        print(f"  Count: {len(data)}")
+        print(f"  Mean: ${data.mean():,.0f}")
+        print(f"  Median: ${data.median():,.0f}")
+        print(f"  Std Dev: ${data.std():,.0f}")
+        print(f"  Min: ${data.min():,.0f}")
+        print(f"  Max: ${data.max():,.0f}")
+        print(f"  Q1 (25%): ${data.quantile(0.25):,.0f}")
+        print(f"  Q3 (75%): ${data.quantile(0.75):,.0f}")
+    
+    # Create visualization: Revenue comparison by timing type (Cinemas)
+    # Merge timing classification with cinema-level aggregated revenue data
+    cinema_timing_revenue = cinema_summary.merge(
+        cinema_plot[["state", "city", "theatre_name", "timing_class"]],
+        on=["state", "city", "theatre_name"],
+        how="left"
+    ).dropna(subset=['timing_class', 'total_gross'])
+    
+    fig = go.Figure()
+    
+    for timing_type in ['EARLY_ADOPTER', 'BALANCED', 'SLOW_BURN']:
+        # Show total gross per cinema (aggregated across all films)
+        data = cinema_timing_revenue[cinema_timing_revenue['timing_class'] == timing_type]['total_gross']
+        
+        fig.add_trace(go.Box(
+            y=data,
+            name=timing_type,
+            marker_color=TIMING_COLORS[timing_type],
+            boxmean='sd',  # Show mean and standard deviation
+            hovertemplate='<b>%{fullData.name}</b><br>Total Gross: $%{y:,.0f}<extra></extra>'
+        ))
+    
+    fig.update_layout(
+        title='Revenue Distribution by Timing Type (Cinemas)',
+        yaxis_title='Total Gross (log scale)',
+        xaxis_title='Timing Type',
+        yaxis_type='log',
+        height=600,
+        width=1000,
+        showlegend=True,
+        hovermode='closest',
+        template='plotly_white'
+    )
+    
+    fig.write_html(OUTPUT_DIR / "q2_cinemas_revenue_boxplot_interactive.html")
+    print("\nSaved: outputs_locationquestions/q2_cinemas_revenue_boxplot_interactive.html")
+    
+    if WRITE_Q2_BOX_PNG:
+        fig.write_image(OUTPUT_DIR / "q2_cinemas_revenue_boxplot.png", width=1000, height=600)
+        print("Saved: outputs_locationquestions/q2_cinemas_revenue_boxplot.png")
+    
+    # Print revenue statistics by timing type
+    print("\n" + "-"*80)
+    print("Revenue Statistics by Timing Type (Cinemas)")
+    print("-"*80)
+    for timing_type in ['EARLY_ADOPTER', 'BALANCED', 'SLOW_BURN']:
+        data = cinema_timing_revenue[cinema_timing_revenue['timing_class'] == timing_type]['total_gross']
+        print(f"\n{timing_type}:")
+        print(f"  Count: {len(data)}")
+        print(f"  Mean: ${data.mean():,.0f}")
+        print(f"  Median: ${data.median():,.0f}")
+        print(f"  Std Dev: ${data.std():,.0f}")
+        print(f"  Min: ${data.min():,.0f}")
+        print(f"  Max: ${data.max():,.0f}")
+        print(f"  Q1 (25%): ${data.quantile(0.25):,.0f}")
+        print(f"  Q3 (75%): ${data.quantile(0.75):,.0f}")
+    
+    print("\nQ2 visualizations saved to outputs/:")
+    print("  - q2_cities_revenue_boxplot_interactive.html")
+    print("  - q2_cinemas_revenue_boxplot_interactive.html")
+if WRITE_Q2_TIMING_MAP_PNG:
+    print("  - q2_cities_timing_map.png")
+    print("  - q2_cinemas_timing_map.png")
+if WRITE_Q2_BOX_PNG:
+    print("  - q2_cities_revenue_boxplot.png")
+    print("  - q2_cinemas_revenue_boxplot.png")
+
+if WRITE_LEGACY_Q3_OUTPUTS:
+    # ============== QUESTION 3: SEASONALITY BY CALENDAR WEEK ==============
+    
+    print("\n" + "="*80)
+    print("QUESTION 3: Seasonality by Calendar Week")
+    print("="*80)
+    
+    # Prepare data for seasonality analysis
+    # Create week_start from actual_sales_date (Monday of the week)
+    sales_for_seasonality = sales_indian.copy()
+    sales_for_seasonality['actual_sales_date'] = pd.to_datetime(sales_for_seasonality['actual_sales_date'])
+    sales_for_seasonality['week_start'] = sales_for_seasonality['actual_sales_date'] - pd.to_timedelta(sales_for_seasonality['actual_sales_date'].dt.dayofweek, unit='d')
+    
+    # Convert to ISO year/week
+    sales_for_seasonality['iso_year'] = sales_for_seasonality['week_start'].dt.isocalendar().year
+    sales_for_seasonality['iso_week'] = sales_for_seasonality['week_start'].dt.isocalendar().week
+    
+    # Aggregate by state-week
+    state_week = (
+        sales_for_seasonality
+        .groupby(['iso_year', 'iso_week', 'state'], as_index=False)
+        .agg({
+            'gross_today': 'sum',
+            'numero_film_id': 'nunique',
+            'theatre_name': 'nunique',
+            'city': 'nunique'
+        })
+        .rename(columns={
+            'gross_today': 'total_gross',
+            'numero_film_id': 'n_titles',
+            'theatre_name': 'n_cinemas',
+            'city': 'n_cities'
+        })
+    )
+    
+    # Seasonality by state-week (mean across years)
+    state_seasonality = (
+        state_week
+        .groupby(['state', 'iso_week'], as_index=False)
+        .agg({
+            'total_gross': ['mean', 'median'],
+            'n_titles': 'mean',
+            'n_cinemas': 'mean',
+            'n_cities': 'mean'
+        })
+        .reset_index(drop=True)
+    )
+    
+    state_seasonality.columns = ['state', 'iso_week', 'avg_gross', 'med_gross', 'avg_titles', 'avg_cinemas', 'avg_cities']
+    
+    # Z-score within each state
+    state_seasonality['gross_z'] = state_seasonality.groupby('state')['avg_gross'].transform(
+        lambda x: (x - x.mean()) / x.std() if x.std() > 0 else 0
+    )
+    
+    # Seasonality index
+    state_seasonality['seasonality_idx'] = (
+        state_seasonality['avg_gross'] / 
+        state_seasonality.groupby('state')['avg_gross'].transform('median')
+    )
+    
+    print(f"State seasonality shape: {state_seasonality.shape}")
+    print(f"ISO weeks covered: {sorted(state_seasonality['iso_week'].unique())}")
+    
+    # Create heatmap data for states
+    state_pivot_z = state_seasonality.pivot(index='state', columns='iso_week', values='gross_z')
+    state_pivot_titles = state_seasonality.pivot(index='state', columns='iso_week', values='avg_titles')
+    state_pivot_cinemas = state_seasonality.pivot(index='state', columns='iso_week', values='avg_cinemas')
+    
+    # Plot state heatmaps
+    fig, axes = plt.subplots(3, 1, figsize=(16, 12))
+    
+    # Heatmap 1: Z-scored seasonality
+    sns.heatmap(state_pivot_z, cmap='RdBu_r', center=0, ax=axes[0], cbar_kws={'label': 'z-score'})
+    axes[0].set_title('State x ISO Week: Z-scored Seasonality (Red=Busy, Blue=Quiet)')
+    axes[0].set_xlabel('ISO Week')
+    axes[0].set_ylabel('State')
+    
+    # Heatmap 2: Avg titles (competition)
+    sns.heatmap(state_pivot_titles, cmap='YlOrRd', ax=axes[1], cbar_kws={'label': 'Avg # Titles'})
+    axes[1].set_title('State x ISO Week: Average # Active Indian Titles (Competition proxy)')
+    axes[1].set_xlabel('ISO Week')
+    axes[1].set_ylabel('State')
+    
+    # Heatmap 3: Avg cinemas
+    sns.heatmap(state_pivot_cinemas, cmap='YlGn', ax=axes[2], cbar_kws={'label': 'Avg # Cinemas'})
+    axes[2].set_title('State x ISO Week: Average # Cinemas Screening Indian Titles')
+    axes[2].set_xlabel('ISO Week')
+    axes[2].set_ylabel('State')
+    
+    plt.tight_layout()
+    plt.savefig(OUTPUT_DIR / "q3_state_seasonality_heatmaps.png", dpi=100, bbox_inches='tight')
+    plt.close()
+    
+    # Find peak and trough weeks per state
+    print("\nTop 5 Busiest and Quietest Weeks per State:")
+    for state in sorted(state_seasonality['state'].unique()):
+        state_data = state_seasonality[state_seasonality['state'] == state].sort_values('avg_gross', ascending=False)
+        print(f"\n{state}:")
+        print("  Top 3 Busiest Weeks:")
+        for i, row in state_data.head(3).iterrows():
+            print(f"    Week {int(row['iso_week'])}: ${row['avg_gross']:,.0f} (avg {row['avg_titles']:.1f} titles, {row['avg_cinemas']:.1f} cinemas)")
+        print("  Top 3 Quietest Weeks:")
+        for i, row in state_data.tail(3).iterrows():
+            print(f"    Week {int(row['iso_week'])}: ${row['avg_gross']:,.0f} (avg {row['avg_titles']:.1f} titles, {row['avg_cinemas']:.1f} cinemas)")
+    
+    # Seasonality index line chart for top states
+    top_states = state_seasonality.groupby('state')['avg_gross'].sum().nlargest(4).index
+    
+    plt.figure(figsize=(14, 6))
+    for state in top_states:
+        state_data = state_seasonality[state_seasonality['state'] == state].sort_values('iso_week')
+        plt.plot(state_data['iso_week'], state_data['seasonality_idx'], marker='o', label=state, linewidth=2)
+    
+    plt.axhline(1, linestyle='--', color='gray', alpha=0.5)
+    plt.xlabel('ISO Week')
+    plt.ylabel('Seasonality Index (avg_gross / median_week)')
+    plt.title('State Seasonality Index by ISO Week (Top 4 States)')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(OUTPUT_DIR / "q3_state_seasonality_lines.png", dpi=100, bbox_inches='tight')
+    plt.close()
+    
+    # City-level seasonality
+    city_week = (
+        sales_for_seasonality
+        .groupby(['iso_year', 'iso_week', 'state', 'city'], as_index=False)
+        .agg({
+            'gross_today': 'sum',
+            'numero_film_id': 'nunique',
+            'theatre_name': 'nunique'
+        })
+        .rename(columns={
+            'gross_today': 'total_gross',
+            'numero_film_id': 'n_titles',
+            'theatre_name': 'n_cinemas'
+        })
+    )
+    
+    city_seasonality = (
+        city_week
+        .groupby(['state', 'city', 'iso_week'], as_index=False)
+        .agg({
+            'total_gross': ['mean', 'median'],
+            'n_titles': 'mean',
+            'n_cinemas': 'mean'
+        })
+        .reset_index(drop=True)
+    )
+    
+    city_seasonality.columns = ['state', 'city', 'iso_week', 'avg_gross', 'med_gross', 'avg_titles', 'avg_cinemas']
+    
+    # Seasonality index for cities
+    city_seasonality['seasonality_idx'] = (
+        city_seasonality['avg_gross'] / 
+        city_seasonality.groupby(['state', 'city'])['avg_gross'].transform('median')
+    )
+    
+    # Select key cities (top by total average gross)
+    key_cities = (
+        city_seasonality
+        .groupby(['state', 'city'])['avg_gross']
+        .sum()
+        .nlargest(10)
+        .index.tolist()
+    )
+    
+    city_seasonality_key = city_seasonality[
+        (city_seasonality['state'].isin([c[0] for c in key_cities])) &
+        (city_seasonality['city'].isin([c[1] for c in key_cities]))
+    ].copy()
+    
+    # Create city heatmap (seasonality index)
+    city_pivot_idx = city_seasonality_key.pivot_table(
+        index=['state', 'city'],
+        columns='iso_week',
+        values='seasonality_idx'
+    )
+    
+    # Create city labels
+    city_pivot_idx.index = [f"{c[0][:10]} | {c[1][:15]}" for c in city_pivot_idx.index]
+    
+    plt.figure(figsize=(16, 8))
+    sns.heatmap(city_pivot_idx, cmap='RdBu_r', center=1, cbar_kws={'label': 'Seasonality Index'}, vmin=0.5, vmax=1.5)
+    plt.title('Key Cities x ISO Week: Seasonality Index (Red=Over-index, Blue=Under-index)')
+    plt.xlabel('ISO Week')
+    plt.ylabel('City')
+    plt.tight_layout()
+    plt.savefig(OUTPUT_DIR / "q3_city_seasonality_heatmap.png", dpi=100, bbox_inches='tight')
+    plt.close()
+    
+    # Bump chart: city ranks by week
+    plt.figure(figsize=(14, 8))
+    for state, city in key_cities:
+        city_data = city_seasonality[
+            (city_seasonality['state'] == state) & 
+            (city_seasonality['city'] == city)
+        ].sort_values('iso_week')
+        
+        # Compute rank within each week
+        city_data = city_data.copy()
+        plt.plot(city_data['iso_week'], city_data['avg_gross'], marker='o', label=f"{city[:15]}", alpha=0.7, linewidth=2)
+    
+    plt.xlabel('ISO Week')
+    plt.ylabel('Average Gross (in $10 Millions)')
+    plt.title('Key Cities: Revenue Trend by ISO Week (Bumps Show Seasonal Variation)')
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=9)
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(OUTPUT_DIR / "q3_city_revenue_trends.png", dpi=100, bbox_inches='tight')
+    plt.close()
+    
+    print("\nQ3 visualizations saved to outputs/:")
+    print("  - q3_state_seasonality_heatmaps.png (3-panel heatmaps)")
+    print("  - q3_state_seasonality_lines.png (seasonality index trends)")
+    print("  - q3_city_seasonality_heatmap.png (key cities by week)")
+    print("  - q3_city_revenue_trends.png (city revenue by week)")
+
+# Summary statistics
+print("\n" + "="*80)
+print("SUMMARY STATISTICS")
+print("="*80)
+
+print(f"\nQ1 Summary:")
+print(f"Total cinemas analyzed: {len(cinema_stats_f)}")
+print(f"Safer (Stable) cinemas: {len(cinema_stats_f[cinema_stats_f['risk_category'] == 'Safer (Stable)'])}")
+print(f"Total cities analyzed: {len(city_stats_f)}")
+print(f"Safer (Stable) cities: {len(city_stats_f[city_stats_f['risk_category'] == 'Safer (Stable)'])}")
+
+print(f"\nQ2 Summary:")
+print(f"Cities analyzed: {len(city_plot)}")
+print(f"Early adopter cities: {len(city_plot[city_plot['timing_class'] == 'EARLY_ADOPTER'])}")
+print(f"Slow burn cities: {len(city_plot[city_plot['timing_class'] == 'SLOW_BURN'])}")
+print(f"Balanced cities: {len(city_plot[city_plot['timing_class'] == 'BALANCED'])}")
+
+print(f"\nCinemas analyzed: {len(cinema_plot)}")
+print(f"Early adopter cinemas: {len(cinema_plot[cinema_plot['timing_class'] == 'EARLY_ADOPTER'])}")
+print(f"Slow burn cinemas: {len(cinema_plot[cinema_plot['timing_class'] == 'SLOW_BURN'])}")
+print(f"Balanced cinemas: {len(cinema_plot[cinema_plot['timing_class'] == 'BALANCED'])}")
+
+print("\n" + "="*80)
+print("ANALYSIS COMPLETE")
+print("="*80)

@@ -1,0 +1,144 @@
+theatre_name,city,state,lat,lon,sa4_code,sa4_name,nearest_competitor_km
+Belconnen 10,Canberra,New South Wales (inc ACT),-35.2281571,149.0556775,801,Australian Capital Territory,8.67828780710663
+Woden 8,Canberra,New South Wales (inc ACT),-35.3498582,149.0940482,801,Australian Capital Territory,8.489450678093903
+Erina 8,Central Coast,New South Wales (inc ACT),-33.434669,151.3823403,102,Central Coast,14.967654049004798
+Tuggerah 9,Central Coast,New South Wales (inc ACT),-33.3038927,151.4205193,102,Central Coast,10.573089175424787
+Dubbo 5,Central and Far West,New South Wales (inc ACT),-37.8671029,145.1625527,212,Melbourne - South East,1.580693701307708
+Broadway 12,City and Inner South,New South Wales (inc ACT),-33.9266029,151.0593687,119,Sydney - Inner South West,2.2909831671238923
+George Street 16,City and Inner South,New South Wales (inc ACT),-33.8630923,151.0874882,120,Sydney - Inner West,1.2006053735434623
+Sydney IMAX,City and Inner South,New South Wales (inc ACT),-33.8737743,151.2011431,117,Sydney - City and Inner South,3.2227572264579654
+Coffs Harbour 5,Coffs Harbour - Grafton,New South Wales (inc ACT),-30.2847876,153.089739,104,Coffs Harbour - Grafton,128.4487067957542
+Bondi Junction 11,Eastern Suburbs,New South Wales (inc ACT),-33.8930034,151.2501228,118,Sydney - Eastern Suburbs,2.2101999857411956
+Eastgardens 8,Eastern Suburbs,New South Wales (inc ACT),-33.9447657,151.2250921,117,Sydney - City and Inner South,3.209006633774881
+Entertainment Quarter 12,Eastern Suburbs,New South Wales (inc ACT),-33.8949874,151.2262965,118,Sydney - Eastern Suburbs,0.08924147281177224
+Castle Hill 15,Hills & Hawkesbury,New South Wales (inc ACT),-33.744035,151.046853,115,Sydney - Baulkham Hills and Hawkesbury,3.6198799617028214
+Rouse Hill 9,Hills & Hawkesbury,New South Wales (inc ACT),-33.6774941,150.9160933,115,Sydney - Baulkham Hills and Hawkesbury,6.716870265509226
+Shellharbour 8,Illawarra,New South Wales (inc ACT),-34.5788697,150.8672489,107,Illawarra,56.168847125041005
+Warrawong 6,Illawarra,New South Wales (inc ACT),-38.0173373,145.3239514,212,Melbourne - South East,2.1440030769058076
+Burwood 12,Inner West,New South Wales (inc ACT),-37.8532007,145.1105801,207,Melbourne - Inner East,3.7495288078352185
+Newtown 10,Inner West,New South Wales (inc ACT),-38.1399862,144.3188173,203,Geelong,0.9519227611538981
+Rhodes 8,Inner West,New South Wales (inc ACT),-33.8127147,151.0913455,126,Sydney - Ryde,1.4063920893342943
+Charlestown 6,Newcastle and Lake Macquarie,New South Wales (inc ACT),-26.3683625,151.9188662,319,Wide Bay,104.06748351507024
+Glendale 8,Newcastle and Lake Macquarie,New South Wales (inc ACT),-34.0177583,151.0695489,128,Sydney - Sutherland,6.543169204073991
+Hornsby 9,North Sydney - Hornsby,New South Wales (inc ACT),-33.6692648,151.0443931,115,Sydney - Baulkham Hills and Hawkesbury,7.283551915628122
+Auburn 10,Parramatta & Ryde,New South Wales (inc ACT),-33.8678253,151.0288254,125,Sydney - Parramatta,2.9614980691194943
+Macquarie 16,Parramatta & Ryde,New South Wales (inc ACT),-31.4321258,152.9182557,108,Mid North Coast,0.9706955307473148
+Parramatta 11,Parramatta & Ryde,New South Wales (inc ACT),-33.8493794,151.0519603,125,Sydney - Parramatta,2.030226783241931
+Byron Bay 9,Richmond - Tweed,New South Wales (inc ACT),-28.6483333,153.6177778,112,Richmond - Tweed,53.397259475340974
+Bankstown 8,South West Sydney,New South Wales (inc ACT),-33.9197875,151.0359369,119,Sydney - Inner South West,2.2909831671238923
+Campbelltown 11,South West Sydney,New South Wales (inc ACT),-34.0766905,150.8011419,123,Sydney - Outer South West,1.5067532824725651
+Liverpool 8,South West Sydney,New South Wales (inc ACT),-37.7813257,144.9787605,206,Melbourne - Inner,1.1280176808993672
+Wetherill Park 12,South West Sydney,New South Wales (inc ACT),-33.8483333,150.9011111,127,Sydney - South West,8.270054789509272
+Hurstville 7,Sutherland & St George,New South Wales (inc ACT),-33.9650953,151.1012128,119,Sydney - Inner South West,5.7635291725706965
+Blacktown 10,West and Blue Mountains,New South Wales (inc ACT),-33.7739882,150.9036186,116,Sydney - Blacktown,5.095094339100172
+Mt. Druitt 8,West and Blue Mountains,New South Wales (inc ACT),-33.7705556,150.8205556,116,Sydney - Blacktown,7.6871034983736815
+Penrith 10,West and Blue Mountains,New South Wales (inc ACT),-37.6912266,145.0476164,209,Melbourne - North East,4.28481636256469
+Casuarina 7,Darwin,Northern Territory,-12.3750635,130.8527952,701,Darwin,18.447609491527416
+Palmerston 6,Darwin,Northern Territory,-12.4799608,130.9844108,701,Darwin,2.6453384244447746
+Alice Springs 4,N.T Outback,Northern Territory,-23.6983884,133.8812885,702,Northern Territory - Outback,1040.741613153111
+Katherine Cinema 3,N.T Outback,Northern Territory,-14.4641472,132.2634002,702,Northern Territory - Outback,259.4704547817012
+Capalaba 8,Brisbane - East,Queensland,-27.522037,153.1918063,301,Brisbane - East,8.900676300769259
+North Lakes 8,Brisbane - East,Queensland,-27.2381221,153.017699,314,Moreton Bay - South,8.429864552644473
+Strathpine 8,Brisbane - East,Queensland,-27.3099861,152.9905347,314,Moreton Bay - South,8.429864552644473
+Barracks 6,Brisbane - Inner City,Queensland,-27.4646688,153.0903088,303,Brisbane - South,4.360208262655911
+Brisbane City 8,Brisbane - Inner City,Queensland,-27.4689623,153.0235009,305,Brisbane Inner City,4.0942944774364465
+Portside 5,Brisbane - Inner City,Queensland,-27.4433003,153.0532578,305,Brisbane Inner City,4.0942944774364465
+Chermside 16,Brisbane - North,Queensland,-27.3859361,153.0368799,302,Brisbane - North,3.208146164413592
+Redcliffe 8,Brisbane - North,Queensland,-27.2268785,153.1129973,313,Moreton Bay - North,9.5047165166195
+Stafford 10,Brisbane - North,Queensland,-27.4103054,153.0194836,302,Brisbane - North,3.208146164413592
+Carindale 7,Brisbane - South,Queensland,-27.5032764,153.1040678,303,Brisbane - South,4.326035912084878
+Coorparoo 10,Brisbane - South,Queensland,-27.496182,153.0609426,303,Brisbane - South,4.326035912084878
+Garden City Mt. Gravatt 16,Brisbane - South,Queensland,-27.5668218,153.0865958,303,Brisbane - South,2.842569374448379
+Loganholme 12,Brisbane - South,Queensland,-27.683054,153.1894379,311,Logan - Beaudesert,16.4224486107661
+Sunnybank 8,Brisbane - South,Queensland,-27.5741448,153.0589657,303,Brisbane - South,2.842569374448379
+Indooroopilly 16,Brisbane - West,Queensland,-27.5065612,152.9822777,304,Brisbane - West,5.832184370133865
+Cairns Central 6,Cairns Region,Queensland,-23.642589,149.3300934,308,Central Queensland,124.18667884115855
+Cairns Smithfield 6,Cairns Region,Queensland,-16.852024,145.6956203,306,Cairns,11.289438109620303
+Rockhampton 6,Central Queensland,Queensland,-23.3782137,150.5134227,308,Central Queensland,124.18667884115855
+Coomera 5,Gold Coast,Queensland,-27.8683965,153.3192117,309,Gold Coast,24.243510563128194
+Springfield 8,Ipswich Region,Queensland,-27.6320423,153.0316423,303,Brisbane - South,6.978241879885956
+Mount Pleasant 6,Mackay - Isaac - Whitsunday,Queensland,-27.1648516,152.7834819,314,Moreton Bay - South,24.55452237019113
+Kawana 9,Sunshine Coast,Queensland,-26.715745,153.121998,316,Sunshine Coast,7.445592582089038
+Maroochydore 12,Sunshine Coast,Queensland,-26.6702988,153.0669563,316,Sunshine Coast,7.445592582089038
+Noosa 5,Sunshine Coast,Queensland,-26.4736093,152.9572978,316,Sunshine Coast,24.43904264823522
+Townsville Central 5,Townsville Region,Queensland,-35.3270481,149.1838579,801,Australian Capital Territory,7.3556135614286955
+Bundaberg 4,Wide Bay,Queensland,-24.8653253,152.3516785,319,Wide Bay,172.6718892383994
+East End Nova 12,Adelaide - Central and Hills,South Australia,-34.9959059,143.6394894,109,Murray,39.107347715665775
+Norwood 6,Adelaide - Central and Hills,South Australia,-34.9218686,138.637857,401,Adelaide - Central and Hills,5.470513478687299
+Piccadilly 3,Adelaide - Central and Hills,South Australia,-34.9822479,138.7262528,401,Adelaide - Central and Hills,10.487146638937666
+Salisbury 8,Adelaide - North,South Australia,-34.754885,138.6482761,402,Adelaide - North,9.434257654399334
+Marion 26,Adelaide - South,South Australia,-35.0183351,138.5589777,403,Adelaide - South,8.90465080932654
+West Lakes 7,Adelaide - West,South Australia,-34.8774096,138.4944993,404,Adelaide - West,7.894593985240639
+Bendigo 7,Bendigo,Victoria (inc TAS),-36.7693742,144.3056134,202,Bendigo,81.41142646832056
+Casino 13,Central Inner Melbourne,Victoria (inc TAS),-33.7359577,150.93436,116,Sydney - Blacktown,5.095094339100172
+Docklands 8,Central Inner Melbourne,Victoria (inc TAS),-37.8194588,144.9478508,206,Melbourne - Inner,2.6745905826343095
+Kino 7,Central Inner Melbourne,Victoria (inc TAS),-12.4753103,131.0083063,701,Darwin,2.6453384244447746
+Melbourne Central 12,Central Inner Melbourne,Victoria (inc TAS),-35.2788314,149.1283647,801,Australian Capital Territory,7.3556135614286955
+Melbourne IMAX,Central Inner Melbourne,Victoria (inc TAS),-37.8035056,144.9706364,206,Melbourne - Inner,2.5675322432605823
+Northcote Westgarth 5,Central Inner Melbourne,Victoria (inc TAS),-37.7783567,144.9910336,206,Melbourne - Inner,1.1280176808993672
+Victoria Gardens 9,Central Inner Melbourne,Victoria (inc TAS),-33.7945852,151.1915181,121,Sydney - North Sydney and Hornsby,0.7752162938996116
+Geelong 11,Geelong,Victoria (inc TAS),-38.131608,144.3210535,203,Geelong,0.9519227611538981
+Waurn Ponds 8,Geelong,Victoria (inc TAS),-38.2037227,144.3022306,203,Geelong,5.062720118810862
+Eastlands 4,Hobart,Victoria (inc TAS),-42.8666358,147.368379,601,Hobart,161.48994434511252
+Glenorchy 4,Hobart,Victoria (inc TAS),-37.7889177,144.5412775,213,Melbourne - West,8.34749572979414
+Balwyn 11,Inner East Melbourne,Victoria (inc TAS),-37.8062176,145.0846856,207,Melbourne - Inner East,5.459094472843211
+Doncaster 9,Inner East Melbourne,Victoria (inc TAS),-37.7837341,145.1399164,207,Melbourne - Inner East,5.459094472843211
+Southland 16,Inner South Melbourne,Victoria (inc TAS),-37.8563275,145.0680569,207,Melbourne - Inner East,3.7495288078352185
+Morwell 8,Latrobe - Gippsland,Victoria (inc TAS),-38.234455,146.4257436,205,Latrobe - Gippsland,58.72365346128493
+Frankston 12,Mornington Peninsula,Victoria (inc TAS),-38.1519979,145.1406364,214,Mornington Peninsula,13.299336517286383
+Epping 11,North East Melbourne,Victoria (inc TAS),-37.6375483,145.0117318,209,Melbourne - North East,6.753013547293034
+Greensborough 8,North East Melbourne,Victoria (inc TAS),-37.7037444,145.0936756,209,Melbourne - North East,4.28481636256469
+Northland 14,North East Melbourne,Victoria (inc TAS),-38.0896975,147.0716937,205,Latrobe - Gippsland,58.72365346128493
+Plenty Valley 9,North East Melbourne,Victoria (inc TAS),-37.7301457,145.0254918,209,Melbourne - North East,3.3708899764750546
+Airport West 8,North West Melbourne,Victoria (inc TAS),-37.7224972,144.8905589,210,Melbourne - North West,4.9921741268403705
+Broadmeadows 7,North West Melbourne,Victoria (inc TAS),-37.6849381,144.9216457,210,Melbourne - North West,4.9921741268403705
+Pentridge 15,North West Melbourne,Victoria (inc TAS),-37.7394864,144.9711722,206,Melbourne - Inner,3.130778534713352
+Eastland 12,Outer East Melbourne,Victoria (inc TAS),-31.8868723,115.8593678,505,Perth - North West,3.738141473216034
+Forest Hill 6,Outer East Melbourne,Victoria (inc TAS),-37.8432234,145.1723434,211,Melbourne - Outer East,2.790950976926568
+Knox 15,Outer East Melbourne,Victoria (inc TAS),-33.720106,151.094033,121,Sydney - North Sydney and Hornsby,1.516371867870825
+Shepparton 4,Shepparton,Victoria (inc TAS),-36.3654213,145.3916758,216,Shepparton,63.29779649289175
+Chadstone 13,South East Melbourne,Victoria (inc TAS),-37.8882153,145.1071173,212,Melbourne - South East,3.905297838019832
+Dandenong 6,South East Melbourne,Victoria (inc TAS),-37.9927845,145.1950422,212,Melbourne - South East,9.297717735518418
+Fountain Gate 14,South East Melbourne,Victoria (inc TAS),-38.014097,145.2998257,212,Melbourne - South East,2.1440030769058076
+M-City 6,South East Melbourne,Victoria (inc TAS),-37.9212268,145.1401803,212,Melbourne - South East,4.6785692863350725
+Launceston 4,Tas - North East,Victoria (inc TAS),-41.4277178,147.1029374,602,Launceston and North East,69.1442861255939
+Burnie Metro 4,Tas - North West,Victoria (inc TAS),-41.0606319,145.9090239,604,West and North West,38.75288166423971
+Devonport 4,Tas - North West,Victoria (inc TAS),-41.1801988,146.3435761,604,West and North West,38.75288166423971
+Highpoint 18,West Melbourne,Victoria (inc TAS),-38.1583526,144.2973794,203,Geelong,2.7721857894902566
+Melton 5,West Melbourne,Victoria (inc TAS),-37.684611,144.5855236,213,Melbourne - West,4.719439393852842
+Millers Junction 6,West Melbourne,Victoria (inc TAS),-37.8441755,144.8435057,213,Melbourne - West,6.204464738769887
+Sunshine 20,West Melbourne,Victoria (inc TAS),-37.7883903,144.8450194,213,Melbourne - West,6.204464738769887
+Watergardens 8,West Melbourne,Victoria (inc TAS),-38.0699922,145.2512896,212,Melbourne - South East,7.5296608759467825
+Werribee 12,West Melbourne,Victoria (inc TAS),-37.9010788,144.6706365,213,Melbourne - West,16.439976798790887
+Raine Square 13,Perth - Inner,Western Australia,-31.9514766,115.8574714,503,Perth - Inner,7.185909742352133
+Morley 8,Perth - North East,Western Australia,-31.8955013,115.8976358,504,Perth - North East,3.738141473216034
+Innaloo 16,Perth - North West,Western Australia,-31.8937756,115.7957972,505,Perth - North West,3.0381975075098557
+Karrinyup 10,Perth - North West,Western Australia,-31.8705761,115.7787989,505,Perth - North West,3.0381975075098557
+Carousel 14,Perth - South East,Western Australia,-32.0159862,115.9399371,506,Perth - South East,10.580555079814017
+Southlands 8,Perth - South East,Western Australia,-37.7265133,144.5940584,213,Melbourne - West,4.719439393852842
+Garden City 8,Perth - South West,Western Australia,-37.837491,144.9199925,206,Melbourne - Inner,3.163360815965668
+Millennium 4,Perth - South West,Western Australia,-33.833588,151.040926,125,Sydney - Parramatta,2.030226783241931
+Albany Orana 4,W.A - Wheat Belt,Western Australia,-34.99188,117.8563777,509,Western Australia - Wheat Belt,375.57297377631255
+Canberra Electric 8,Canberra,New South Wales (inc ACT),-35.1493578,147.4681345,113,Riverina,144.53235674298136
+Lake Haven Metro 8,Central Coast,New South Wales (inc ACT),-33.2413011,151.5061336,102,Central Coast,10.573089175424787
+Central Sydney 13,City and Inner South,New South Wales (inc ACT),-33.7289266,151.0815284,121,Sydney - North Sydney and Hornsby,1.516371867870825
+Palace Moore Park 4,Eastern Suburbs,New South Wales (inc ACT),-33.894308,151.2257818,118,Sydney - Eastern Suburbs,0.08924147281177224
+Randwick Ritz 9,Eastern Suburbs,New South Wales (inc ACT),-33.9201716,151.2432906,118,Sydney - Eastern Suburbs,3.0860675707720633
+"Green Hills, Maitland 7",Hunter Valley exc Newcastle,New South Wales (inc ACT),-32.762662,151.5910236,106,Hunter Valley exc Newcastle,53.807824961254106
+Majestic Cinemas Port Macquarie 5,Mid North Coast,New South Wales (inc ACT),-31.4294311,152.9085245,108,Mid North Coast,0.9706955307473148
+Chatswood Westfield 6,North Sydney - Hornsby,New South Wales (inc ACT),-33.7969658,151.1836331,121,Sydney - North Sydney and Hornsby,0.7752162938996116
+Warriewood United 7,Northern Beaches,New South Wales (inc ACT),-33.6937837,151.3026016,122,Sydney - Northern Beaches,8.883516906269817
+Warringah Mall 9,Northern Beaches,New South Wales (inc ACT),-33.7673546,151.2651537,122,Sydney - Northern Beaches,7.448735126196163
+Top Ryde 8,Parramatta & Ryde,New South Wales (inc ACT),-33.8124512,151.1065649,126,Sydney - Ryde,1.4063920893342943
+Tweed City 6,Richmond - Tweed,New South Wales (inc ACT),-28.172694,153.5426089,112,Richmond - Tweed,40.32086481085567
+Dumaresq Cinemas 3,South West Sydney,New South Wales (inc ACT),-34.0667506,150.81226,123,Sydney - Outer South West,1.5067532824725651
+Ed Square 6,South West Sydney,New South Wales (inc ACT),-33.8724015,151.0940759,120,Sydney - Inner West,1.2006053735434623
+Cairns Earlville 6,Cairns Region,Queensland,-16.9445096,145.7393959,306,Cairns,11.289438109620303
+Harbourtown 16,Gold Coast,Queensland,-34.9459035,138.5172891,404,Adelaide - West,7.894593985240639
+Hoyts Ipswich 6,Ipswich Region,Queensland,-27.6135982,152.7588076,310,Ipswich,25.038724408301125
+Prospect Palace Nova 14,Adelaide - Central and Hills,South Australia,-34.8885007,138.5937745,401,Adelaide - Central and Hills,5.470513478687299
+Tea Tree Plaza 9,Adelaide - North,South Australia,-34.8314374,138.6928226,402,Adelaide - North,9.434257654399334
+Thornbury Picture House 1,Central Inner Melbourne,Victoria (inc TAS),-37.7539366,145.0017325,206,Melbourne - Inner,2.8736417508788694
+Swan Hill Showbiz 3,North West Victoria,Victoria (inc TAS),-35.3412862,143.5582931,215,North West,39.107347715665775
+Echuca Paramount Cinema 4,Shepparton,Victoria (inc TAS),-36.1299739,144.7490245,216,Shepparton,63.29779649289175
+Century City 10,South East Melbourne,Victoria (inc TAS),-37.8812183,145.1646861,212,Melbourne - South East,1.580693701307708

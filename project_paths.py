@@ -1,12 +1,18 @@
+"""Compatibility shim — re-exports from masalytics.paths for legacy imports."""
+
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Optional
 
-BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR / "data"
-
-OUTPUTS_SALESOVERVIEW = BASE_DIR / "outputs_salesoverview"
-OUTPUTS_TITLES_DISTRIBUTORS = BASE_DIR / "outputs_titlesdistributors"
-OUTPUTS_LOCATION_QUESTIONS = BASE_DIR / "outputs_locationquestions"
+from masalytics.paths import (
+    DATA_DIR,
+    OUTPUTS_LOCATIONQUESTIONS_DIR as OUTPUTS_LOCATION_QUESTIONS,
+    OUTPUTS_SALESOVERVIEW_DIR as OUTPUTS_SALESOVERVIEW,
+    OUTPUTS_TITLES_DISTRIBUTORS_DIR as OUTPUTS_TITLES_DISTRIBUTORS,
+    PROJECT_ROOT as BASE_DIR,
+    find_database,
+)
 
 
 def ensure_dir(path: Path) -> Path:
@@ -15,17 +21,18 @@ def ensure_dir(path: Path) -> Path:
 
 
 def find_database_path(preferred: Optional[Path] = None) -> Path:
-    candidates = []
-    if preferred is not None:
-        candidates.append(preferred)
+    # Old behaviour: a missing `preferred` falls through to glob search rather than erroring.
+    if preferred is not None and Path(preferred).is_file():
+        return Path(preferred)
+    return find_database()
 
-    candidates.extend(sorted(DATA_DIR.glob("*.sqlite")))
-    candidates.extend(sorted(DATA_DIR.glob("*.db")))
-    candidates.extend(sorted(BASE_DIR.glob("*.sqlite")))
-    candidates.extend(sorted(BASE_DIR.glob("*.db")))
 
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate
-
-    raise FileNotFoundError("No .db/.sqlite file found in project root or data/")
+__all__ = [
+    "BASE_DIR",
+    "DATA_DIR",
+    "OUTPUTS_LOCATION_QUESTIONS",
+    "OUTPUTS_SALESOVERVIEW",
+    "OUTPUTS_TITLES_DISTRIBUTORS",
+    "ensure_dir",
+    "find_database_path",
+]
